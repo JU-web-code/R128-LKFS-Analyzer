@@ -420,26 +420,15 @@ function drawWaveform(buf){
   ctx.globalAlpha=1;
 }
 
-// ─── PARSER WAV HEADER SEUL (lit juste les 1024 premiers octets) ─────────────
-function readSlice(file, start, length){
-  return new Promise((resolve,reject)=>{
-    const blob=file.slice(start, start+length);
-    const r=new FileReader();
-    r.onload=e=>resolve(e.target.result);
-    r.onerror=()=>reject(new Error('Slice read error'));
-    r.readAsArrayBuffer(blob);
-  });
-}
-
-async function parseWavHeader(file){
-  const headerBuf=await readSlice(file,0,512);
-  const v=new DataView(headerBuf);
-  const u8=new Uint8Array(headerBuf);
+// ─── PARSER WAV RIFF MANUEL (gère WAVE_FORMAT_EXTENSIBLE 5.1/7.1) ────────────
+function parseWavRiff(arrayBuf){
+  const v=new DataView(arrayBuf);
+  const u8=new Uint8Array(arrayBuf);
   const str4=(o)=>String.fromCharCode(u8[o],u8[o+1],u8[o+2],u8[o+3]);
-  if(str4(0)!=='RIFF'||str4(8)!=='WAVE') return null;
+  if(str4(0)!=='RIFF'||str4(8)!=='WAVE') return null; // pas un WAV
 
   let pos=12, fmt=null, dataOffset=0, dataSize=0;
-  while(pos<u8.length-8){
+  while(pos<v.byteLength-8){
     const id=str4(pos);
     const sz=v.getUint32(pos+4,true);
     if(id==='fmt '){
@@ -447,215 +436,48 @@ async function parseWavHeader(file){
       const nCh=v.getUint16(pos+10,true);
       const sr=v.getUint32(pos+12,true);
       const bitsPerSample=v.getUint16(pos+22,true);
+      // WAVE_FORMAT_EXTENSIBLE (0xFFFE) ou PCM (1) ou float (3)
       const isFloat=(audioFmt===3)||(audioFmt===0xFFFE&&bitsPerSample===32);
       fmt={audioFmt,nCh,sr,bitsPerSample,isFloat};
     } else if(id==='data'){
       dataOffset=pos+8;
       dataSize=sz;
-      break;
     }
-    pos+=8+sz+(sz&1);
+    pos+=8+sz+(sz&1); // RIFF chunks sont word-aligned
+    if(dataOffset&&fmt) break;
   }
-  return fmt&&dataOffset?{...fmt,dataOffset,dataSize}:null;
-}
+  if(!fmt||!dataOffset) return null;
 
-// ─── TRAITEMENT PAR CHUNKS (évite l'out-of-memory sur les gros fichiers) ──────
-async function processWavChunked(file, wavInfo, onProgress){
-  const {nCh,sr,bitsPerSample,isFloat,dataOffset,dataSize}=wavInfo;
+  const {nCh,sr,bitsPerSample,isFloat}=fmt;
   const bytesPerSample=bitsPerSample/8;
-  const bytesPerFrame=nCh*bytesPerSample;
-  const totalFrames=Math.floor(dataSize/bytesPerFrame);
+  const nFrames=Math.floor(dataSize/(nCh*bytesPerSample));
 
-  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  // Créer un AudioBuffer synthétique
+  const ctx=audioCtx||(audioCtx=new (window.AudioContext||window.webkitAudioContext)());
+  const buf=ctx.createBuffer(nCh,nFrames,sr);
 
-  // Taille de chunk : ~50 Mo max pour rester dans la RAM
-  const CHUNK_BYTES=50*1024*1024;
-  const CHUNK_FRAMES=Math.floor(CHUNK_BYTES/bytesPerFrame);
-
-  // Accumulateurs pour le calcul R128 (on n'a pas besoin de l'AudioBuffer complet)
-  // On calcule directement LUFS, TP, LRA à la volée
-  const gains=Array.from({length:nCh},(_,i)=>chGain(nCh,i));
-
-  // Fenêtres glissantes
-  const SR=sr;
-  const M_FRAMES=Math.round(0.4*SR);   // Momentary 400ms
-  const S_FRAMES=Math.round(3*SR);     // Short-term 3s
-  const STEP_FRAMES=Math.round(0.1*SR); // step 100ms
-
-  // Buffers de canaux K-weightés pour les fenêtres (on garde un ring buffer)
-  // Simplifié : on stocke les energies par blocs de 100ms
-  const blockEnergiesM=[]; // blocs 400ms (momentary)
-  const blockEnergiesS=[]; // blocs 3s (short-term)
-  const blockEnergiesI=[]; // blocs intégrés
-
-  let truePeak=-Infinity;
-  let framePos=0;
-
-  // Buffers pour K-weighting par canal (état des filtres)
-  const fState=Array.from({length:nCh},()=>({s1:{x1:0,x2:0,y1:0,y2:0},s2:{x1:0,x2:0,y1:0,y2:0}}));
-  const kCoeffs=makeKWeightCoeffs(sr);
-
-  // Ring buffer de 3s pour short-term
-  const ringSize=S_FRAMES;
-  const ring=Array.from({length:nCh},()=>new Float32Array(ringSize));
-  let ringPos=0;
-
-  // Buffer 100ms pour accumuler les blocs de step
-  const stepBuf=Array.from({length:nCh},()=>new Float32Array(STEP_FRAMES));
-  let stepFill=0;
-
-  // Stocker des AudioBuffer partiels pour la waveform (décimés)
-  const waveDecim=512; // 1 sample gardé sur 512 pour la visu
-  const waveData=Array.from({length:nCh},()=>[]);
-
-  function applyBiquadSample(x, coeff, state){
-    const {b0,b1,b2,a1,a2}=coeff;
-    const y=b0*x+b1*state.x1+b2*state.x2-a1*state.y1-a2*state.y2;
-    state.x2=state.x1; state.x1=x; state.y2=state.y1; state.y1=y;
-    return y;
-  }
-
-  function kWeightSample(x, chIdx){
-    const st=fState[chIdx];
-    const y1=applyBiquadSample(x,kCoeffs.s1,st.s1);
-    return applyBiquadSample(y1,kCoeffs.s2,st.s2);
-  }
-
-  let chunkStart=dataOffset;
-  let totalChunks=Math.ceil(dataSize/CHUNK_BYTES);
-  let chunkIdx=0;
-
-  while(chunkStart<dataOffset+dataSize){
-    const chunkLen=Math.min(CHUNK_BYTES, dataOffset+dataSize-chunkStart);
-    const chunkBuf=await readSlice(file, chunkStart, chunkLen);
-    const v2=new DataView(chunkBuf);
-    const u2=new Uint8Array(chunkBuf);
-    const chunkFrames=Math.floor(chunkLen/bytesPerFrame);
-
-    for(let f=0;f<chunkFrames;f++){
-      const frameBytePos=f*bytesPerFrame;
-
-      for(let c=0;c<nCh;c++){
-        const bytePos=frameBytePos+c*bytesPerSample;
-        let raw=0;
-        if(isFloat&&bitsPerSample===32){
-          raw=v2.getFloat32(bytePos,true);
-        } else if(bitsPerSample===24){
-          const b0=u2[bytePos],b1=u2[bytePos+1],b2=u2[bytePos+2];
-          let val=b0|(b1<<8)|(b2<<16);
-          if(val&0x800000) val|=0xFF000000;
-          raw=val/8388608.0;
-        } else if(bitsPerSample===16){
-          raw=v2.getInt16(bytePos,true)/32768.0;
-        } else {
-          raw=v2.getInt32(bytePos,true)/2147483648.0;
-        }
-
-        // True Peak
-        const absRaw=Math.abs(raw);
-        if(absRaw>truePeak) truePeak=absRaw;
-
-        // Waveform décimée
-        if((framePos+f)%waveDecim===0) waveData[c].push(raw);
-
-        // K-weighting sample par sample
-        const kw=kWeightSample(raw,c);
-        stepBuf[c][stepFill]=kw;
-        ring[c][ringPos%ringSize]=kw;
-      }
-
-      stepFill++;
-      if(stepFill>=STEP_FRAMES){
-        // Calculer l'énergie de ce bloc de 100ms
-        let e=0;
-        for(let c=0;c<nCh;c++){
-          const g=gains[c]; if(g===0) continue;
-          let sum=0;
-          for(let i=0;i<STEP_FRAMES;i++) sum+=stepBuf[c][i]**2;
-          e+=g*g*sum/STEP_FRAMES;
-        }
-        blockEnergiesI.push(e);
-        stepFill=0;
-      }
-
-      ringPos++;
-    }
-
-    chunkStart+=chunkLen;
-    chunkIdx++;
-    if(onProgress) onProgress(chunkIdx/totalChunks);
-    await tick();
-  }
-
-  // True Peak en dBTP
-  const tpDB=20*Math.log10(Math.max(truePeak,1e-12));
-
-  // Integrated LUFS depuis blockEnergiesI
-  const IL=calcIntegratedFromBlocks(blockEnergiesI, false);
-
-  // LRA depuis blockEnergiesI (on regroupe en blocs de 3s = 30 blocs de 100ms)
-  const LRA=calcLRAFromBlocks(blockEnergiesI);
-
-  // Momentary Max (4 blocs de 100ms = 400ms)
-  const M=calcWindowMax(blockEnergiesI, 4);
-  // Short-term Max (30 blocs = 3s)
-  const S=calcWindowMax(blockEnergiesI, 30);
-
-  // Construire un AudioBuffer synthétique pour la waveform
-  const waveFrames=waveData[0].length;
-  const waveBuf=audioCtx.createBuffer(nCh, waveFrames, Math.round(sr/waveDecim));
   for(let c=0;c<nCh;c++){
-    const ch=waveBuf.getChannelData(c);
-    for(let i=0;i<waveFrames;i++) ch[i]=waveData[c][i];
+    const ch=buf.getChannelData(c);
+    for(let i=0;i<nFrames;i++){
+      const bytePos=dataOffset+(i*nCh+c)*bytesPerSample;
+      let s=0;
+      if(isFloat&&bitsPerSample===32){
+        s=v.getFloat32(bytePos,true);
+      } else if(bitsPerSample===24){
+        // 24-bit signed little-endian
+        const b0=u8[bytePos],b1=u8[bytePos+1],b2=u8[bytePos+2];
+        let val=b0|(b1<<8)|(b2<<16);
+        if(val&0x800000) val|=0xFF000000; // sign extend
+        s=val/8388608.0;
+      } else if(bitsPerSample===16){
+        s=v.getInt16(bytePos,true)/32768.0;
+      } else if(bitsPerSample===32&&!isFloat){
+        s=v.getInt32(bytePos,true)/2147483648.0;
+      }
+      ch[i]=s;
+    }
   }
-
-  return {IL, TP:tpDB, LRA, M, S, sr, nCh, duration:totalFrames/sr, dialogMode:false, waveBuf};
-}
-
-function calcIntegratedFromBlocks(blocks, dialogMode){
-  if(!blocks.length) return -Infinity;
-  const ABS_THRESH=Math.pow(10,(-70+0.691)/10);
-  let gated=blocks.filter(e=>e>ABS_THRESH);
-  if(!gated.length) return -Infinity;
-  if(dialogMode){
-    gated.sort((a,b)=>b-a);
-    gated=gated.slice(0,Math.max(1,Math.floor(gated.length*0.3)));
-  } else {
-    const avgAbs=gated.reduce((s,e)=>s+e,0)/gated.length;
-    const relThresh=avgAbs*Math.pow(10,-10/10);
-    gated=gated.filter(e=>e>relThresh);
-    if(!gated.length) return -Infinity;
-  }
-  return lufsFromEnergy(gated.reduce((s,e)=>s+e,0)/gated.length);
-}
-
-function calcLRAFromBlocks(blocks){
-  // Regrouper les blocs de 100ms en fenêtres de 3s (30 blocs)
-  const ST=[];
-  for(let i=0;i+30<=blocks.length;i+=10){
-    const slice=blocks.slice(i,i+30);
-    ST.push(slice.reduce((s,e)=>s+e,0)/30);
-  }
-  if(ST.length<2) return 0;
-  const ABS_THRESH=Math.pow(10,(-70+0.691)/10);
-  const gated=ST.filter(e=>e>ABS_THRESH);
-  if(gated.length<2) return 0;
-  const avg=gated.reduce((s,e)=>s+e,0)/gated.length;
-  const relThresh=avg*Math.pow(10,-20/10);
-  const gated2=gated.filter(e=>e>relThresh);
-  if(gated2.length<2) return 0;
-  const lufs=gated2.map(e=>lufsFromEnergy(e)).sort((a,b)=>a-b);
-  return Math.max(0,lufs[Math.floor(lufs.length*0.95)]-lufs[Math.floor(lufs.length*0.10)]);
-}
-
-function calcWindowMax(blocks, windowBlocks){
-  let max=-Infinity;
-  for(let i=0;i+windowBlocks<=blocks.length;i++){
-    const e=blocks.slice(i,i+windowBlocks).reduce((s,v)=>s+v,0)/windowBlocks;
-    const l=lufsFromEnergy(e);
-    if(l>max) max=l;
-  }
-  return max;
+  return buf;
 }
 
 // ─── PIPELINE D'ANALYSE ───────────────────────────────────────────────────────
@@ -748,8 +570,8 @@ function displayResults(res){
 function loadFile(file){
   currentFile=file;
   cachedArrayBuffer=null;
-  els.meta.textContent=file.name+' — '+formatSize(file.size);
-  els.analyze.disabled=false;
+  els.meta.textContent=file.name+' — '+formatSize(file.size)+' · Chargement…';
+  els.analyze.disabled=true;
   clearStatus();
 
   // Prévisualisation vidéo
@@ -761,6 +583,19 @@ function loadFile(file){
     els.preview.style.display='none';
     els.preview.src='';
   }
+
+  // Lire le fichier IMMÉDIATEMENT pendant que la référence est fraîche
+  const reader=new FileReader();
+  reader.onload=e=>{
+    cachedArrayBuffer=e.target.result;
+    els.meta.textContent=file.name+' — '+formatSize(file.size)+' · Prêt ✓';
+    els.analyze.disabled=false;
+  };
+  reader.onerror=()=>{
+    els.meta.textContent=file.name+' — Erreur de lecture';
+    setStatus('Impossible de lire le fichier (permissions ou format). Essaie de le copier sur le bureau puis recharge.','err');
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function formatSize(b){
@@ -779,40 +614,43 @@ async function startAnalysis(){
   setProgress(2,'Lecture du fichier…');
 
   try{
-    console.log('[R128] File:', currentFile.name, 'Size:', (currentFile.size/1e6).toFixed(1)+'MB');
+    // Utiliser le buffer mis en cache à la sélection (évite les erreurs de référence stale)
+    if(!cachedArrayBuffer) throw new Error('Fichier non chargé. Resélectionne le fichier.');
+    // Cloner le buffer car decodeAudioData le consomme (le vide)
+    const arrayBuf=cachedArrayBuffer.slice(0);
+    setProgress(10,'Décodage audio…');
+    await tick();
+
+    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    console.log('[R128] File:', currentFile.name, currentFile.type, 'Size:', (currentFile.size/1e6).toFixed(1)+'MB');
+    setProgress(15,'Décodage audio…');
+    await tick();
     if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
 
+    let decoded=null;
+
+    // 1. Essai parser WAV RIFF manuel (gère WAVE_FORMAT_EXTENSIBLE 5.1/7.1 24-bit)
     const isWav=/\.wav$/i.test(currentFile.name)||currentFile.type==='audio/wav'||currentFile.type==='audio/x-wav';
-
     if(isWav){
-      setProgress(10,'Lecture header WAV…');
+      setProgress(20,'Parsing WAV RIFF (multicanal)…');
       await tick();
-      const wavInfo=await parseWavHeader(currentFile);
-      if(!wavInfo) throw new Error('Header WAV invalide ou format non reconnu.');
-      console.log('[R128] WAV info:', wavInfo);
-
-      const results=await processWavChunked(currentFile, wavInfo, (p)=>{
-        setProgress(10+p*80, 'Analyse… '+(p*100|0)+'%');
-      });
-      drawWaveform(results.waveBuf);
-      displayResults(results);
-
-    } else {
-      setProgress(10,'Chargement fichier…');
-      await tick();
-      const arrayBuf=await readSlice(currentFile,0,currentFile.size);
-      setProgress(40,'Décodage audio…');
-      await tick();
-      const decoded=await new Promise((res,rej)=>{
-        audioCtx.decodeAudioData(arrayBuf,res,(err)=>{
-          rej(new Error('Format non supporté. Utilise un WAV PCM 48kHz 16/24-bit.'));
-        });
-      });
-      audioBuffer=decoded;
-      const results=await runAnalysis(decoded);
-      displayResults(results);
+      try{ decoded=parseWavRiff(arrayBuf); }catch(e){ console.warn('RIFF parse err:',e); }
     }
 
+    // 2. Fallback : decodeAudioData natif du navigateur
+    if(!decoded){
+      setProgress(20,'Décodage audio natif…');
+      await tick();
+      decoded = await new Promise((res, rej) => {
+        audioCtx.decodeAudioData(arrayBuf.slice(0), res, (err) => {
+          rej(new Error('Format non décodable. WAV PCM 48kHz 16/24-bit recommandé.'));
+        });
+      });
+    }
+    audioBuffer=decoded;
+
+    const results=await runAnalysis(decoded);
+    displayResults(results);
   } catch(e){
     hideProgress();
     console.error('R128 error:', e);
