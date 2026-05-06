@@ -779,40 +779,40 @@ async function startAnalysis(){
   setProgress(2,'Lecture du fichier…');
 
   try{
-
-    setProgress(10,'Décodage audio…');
-    await tick();
-
-    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-    console.log('[R128] File:', currentFile.name, currentFile.type, 'Size:', (currentFile.size/1e6).toFixed(1)+'MB');
-    setProgress(15,'Décodage audio…');
-    await tick();
+    console.log('[R128] File:', currentFile.name, 'Size:', (currentFile.size/1e6).toFixed(1)+'MB');
     if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
 
-    let decoded=null;
-
-    // 1. Essai parser WAV RIFF manuel (gère WAVE_FORMAT_EXTENSIBLE 5.1/7.1 24-bit)
     const isWav=/\.wav$/i.test(currentFile.name)||currentFile.type==='audio/wav'||currentFile.type==='audio/x-wav';
-    if(isWav){
-      setProgress(20,'Parsing WAV RIFF (multicanal)…');
-      await tick();
-      try{ decoded=parseWavRiff(arrayBuf); }catch(e){ console.warn('RIFF parse err:',e); }
-    }
 
-    // 2. Fallback : decodeAudioData natif du navigateur
-    if(!decoded){
-      setProgress(20,'Décodage audio natif…');
+    if(isWav){
+      setProgress(10,'Lecture header WAV…');
       await tick();
-      decoded = await new Promise((res, rej) => {
-        audioCtx.decodeAudioData(arrayBuf.slice(0), res, (err) => {
-          rej(new Error('Format non décodable. WAV PCM 48kHz 16/24-bit recommandé.'));
+      const wavInfo=await parseWavHeader(currentFile);
+      if(!wavInfo) throw new Error('Header WAV invalide ou format non reconnu.');
+      console.log('[R128] WAV info:', wavInfo);
+
+      const results=await processWavChunked(currentFile, wavInfo, (p)=>{
+        setProgress(10+p*80, 'Analyse… '+(p*100|0)+'%');
+      });
+      drawWaveform(results.waveBuf);
+      displayResults(results);
+
+    } else {
+      setProgress(10,'Chargement fichier…');
+      await tick();
+      const arrayBuf=await readSlice(currentFile,0,currentFile.size);
+      setProgress(40,'Décodage audio…');
+      await tick();
+      const decoded=await new Promise((res,rej)=>{
+        audioCtx.decodeAudioData(arrayBuf,res,(err)=>{
+          rej(new Error('Format non supporté. Utilise un WAV PCM 48kHz 16/24-bit.'));
         });
       });
+      audioBuffer=decoded;
+      const results=await runAnalysis(decoded);
+      displayResults(results);
     }
-    audioBuffer=decoded;
 
-    const results=await runAnalysis(decoded);
-    displayResults(results);
   } catch(e){
     hideProgress();
     console.error('R128 error:', e);
