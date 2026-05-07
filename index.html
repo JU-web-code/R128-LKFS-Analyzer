@@ -1,62 +1,21 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>R128 / LKFS Analyzer</title>
 <style>
 :root{--bg:#0b0f17;--panel:#121826cc;--border:#24304a;--text:#eef2ff;--muted:#9aa4bf;--accent:#e50914;--accent2:#7c3aed;--ok:#22c55e;--bad:#ef4444;--shadow:0 20px 60px rgba(0,0,0,.35)}
 *{box-sizing:border-box}html,body{margin:0}
 body{font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--text);background:radial-gradient(circle at top left,rgba(124,58,237,.18),transparent 30%),radial-gradient(circle at top right,rgba(229,9,20,.14),transparent 28%),linear-gradient(180deg,#0a0e16,#0b0f17 35%,#0f1422);min-height:100vh;padding:28px}
-.app{max-width:1200px;margin:0 auto}
-.hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:20px}
-.title{font-size:34px;font-weight:900;letter-spacing:-.02em}.title span{color:var(--accent)}
-.sub{color:var(--muted);margin-top:8px;line-height:1.5}
-.badge{padding:8px 12px;border:1px solid var(--border);border-radius:999px;color:#cbd5e1;background:rgba(255,255,255,.03);font-size:12px;white-space:nowrap}
-.panel{background:var(--panel);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(14px);border-radius:22px;box-shadow:var(--shadow)}
-.topbar{display:grid;grid-template-columns:1.25fr .75fr;gap:18px}
-.drop{padding:28px;border:2px dashed #31415f;text-align:center;transition:.2s;position:relative;overflow:hidden}
-.drop.drag{border-color:var(--accent)}
-.drop::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(229,9,20,.08),rgba(124,58,237,.06));pointer-events:none}
-.drop-inner{position:relative;z-index:1}
-.big{font-size:22px;font-weight:800;margin-bottom:8px}
-.hint{color:var(--muted);font-size:14px}.meta{color:#c4cbe0;font-size:13px;margin-top:12px}
-.controls{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;justify-content:center}
-.btn{border:0;border-radius:14px;padding:12px 18px;font-weight:800;cursor:pointer;transition:.2s}
-.btn:hover{transform:translateY(-1px)}.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
-.primary{background:linear-gradient(135deg,var(--accent),#ff4451);color:#fff}.secondary{background:#212b42;color:#fff}
-.select{background:#212b42;color:#fff;border:1px solid #31415f;border-radius:14px;padding:12px 14px;font-weight:700;font-size:14px}
-.row{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:12px}
-.pill{padding:8px 12px;border-radius:999px;background:#1d263b;color:#cfd8ef;font-size:12px;border:1px solid #30405f}
-.progress-wrap{margin-top:16px;display:none}
-.progress-head{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px}
-.progress{height:14px;background:#0e1422;border-radius:999px;overflow:hidden;border:1px solid #202b44}
-.bar{height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,var(--accent),#ff6b75 40%,var(--accent2));transition:width .25s ease}
-.status{display:none;margin-top:14px;padding:12px 14px;border-radius:14px;font-size:14px}
-.status.ok{display:block;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#bbf7d0}
-.status.err{display:block;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);color:#fecaca}
-.status.warn{display:block;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#fde68a}
-.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:18px}
-.card{padding:18px;position:relative;overflow:hidden}
-.card::before{content:'';position:absolute;inset:auto -30% -40% auto;width:120px;height:120px;background:radial-gradient(circle,rgba(255,255,255,.08),transparent 70%)}
-.lab{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.val{font-size:34px;font-weight:900;margin-top:10px;letter-spacing:-.03em}.unit{font-size:12px;color:var(--muted)}.spec{font-size:12px;color:#7f8aa8;margin-top:8px}
-.ok .val{color:var(--ok)}.bad .val{color:var(--bad)}
-.section{margin-top:18px;padding:18px}
-.section-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px}
-.section-title{font-size:14px;font-weight:800;color:#d7def3;letter-spacing:.08em;text-transform:uppercase}
-.ch-legend{display:flex;gap:10px;flex-wrap:wrap}
-.ch-dot{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
-.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-#waveCanvas{display:block;background:linear-gradient(180deg,#0a0f19,#0e1422);border-radius:16px;border:1px solid #202b44;width:100%}
-.report{display:none}.table{width:100%;border-collapse:collapse}
-.table td{padding:10px 0;border-bottom:1px solid #1e2740}
-.table td:first-child{color:var(--muted)}.table td:last-child{text-align:right;font-variant-numeric:tabular-nums}
-.pass{color:var(--ok);font-weight:800}.fail{color:var(--bad);font-weight:800}
-video{display:none;width:100%;border-radius:18px;border:1px solid #23304d;background:#000;max-height:280px}
-.footer-note{color:#8190b4;font-size:12px}
-@media(max-width:1050px){.grid{grid-template-columns:repeat(2,1fr)}.topbar{grid-template-columns:1fr}.hero{display:block}}
-@media(max-width:640px){body{padding:16px}.grid{grid-template-columns:1fr}.title{font-size:26px}}
+.app{max-width:1200px;margin:0 auto}.hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:20px}.title{font-size:34px;font-weight:900;letter-spacing:-.02em}.title span{color:var(--accent)}.sub{color:var(--muted);margin-top:8px;line-height:1.5}.badge{padding:8px 12px;border:1px solid var(--border);border-radius:999px;color:#cbd5e1;background:rgba(255,255,255,.03);font-size:12px;white-space:nowrap}
+.panel{background:var(--panel);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(14px);border-radius:22px;box-shadow:var(--shadow)}.topbar{display:grid;grid-template-columns:1.25fr .75fr;gap:18px}.drop{padding:28px;border:2px dashed #31415f;text-align:center;transition:.2s;position:relative;overflow:hidden}.drop.drag{border-color:var(--accent)}.drop::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(229,9,20,.08),rgba(124,58,237,.06));pointer-events:none}.drop-inner{position:relative;z-index:1}
+.big{font-size:22px;font-weight:800;margin-bottom:8px}.hint{color:var(--muted);font-size:14px}.meta{color:#c4cbe0;font-size:13px;margin-top:12px}.controls{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;justify-content:center}.btn{border:0;border-radius:14px;padding:12px 18px;font-weight:800;cursor:pointer;transition:.2s}.btn:hover{transform:translateY(-1px)}.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}.primary{background:linear-gradient(135deg,var(--accent),#ff4451);color:#fff}.secondary{background:#212b42;color:#fff}.select{background:#212b42;color:#fff;border:1px solid #31415f;border-radius:14px;padding:12px 14px;font-weight:700;font-size:14px}
+.row{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:12px}.pill{padding:8px 12px;border-radius:999px;background:#1d263b;color:#cfd8ef;font-size:12px;border:1px solid #30405f}.progress-wrap{margin-top:16px;display:none}.progress-head{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px}.progress{height:14px;background:#0e1422;border-radius:999px;overflow:hidden;border:1px solid #202b44}.bar{height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,var(--accent),#ff6b75 40%,var(--accent2));transition:width .25s ease}.status{display:none;margin-top:14px;padding:12px 14px;border-radius:14px;font-size:14px}.status.ok{display:block;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#bbf7d0}.status.err{display:block;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);color:#fecaca}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:18px}.card{padding:18px;position:relative;overflow:hidden}.card::before{content:'';position:absolute;inset:auto -30% -40% auto;width:120px;height:120px;background:radial-gradient(circle,rgba(255,255,255,.08),transparent 70%)}.lab{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.val{font-size:34px;font-weight:900;margin-top:10px;letter-spacing:-.03em}.unit{font-size:12px;color:var(--muted)}.spec{font-size:12px;color:#7f8aa8;margin-top:8px}.ok .val{color:var(--ok)}.bad .val{color:var(--bad)}
+.section{margin-top:18px;padding:18px}.section-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px}.section-title{font-size:14px;font-weight:800;color:#d7def3;letter-spacing:.08em;text-transform:uppercase}.ch-legend{display:flex;gap:10px;flex-wrap:wrap}.ch-dot{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+#waveCanvas{display:block;background:linear-gradient(180deg,#0a0f19,#0e1422);border-radius:16px;border:1px solid #202b44;width:100%}.report{display:none}.table{width:100%;border-collapse:collapse}.table td{padding:10px 0;border-bottom:1px solid #1e2740}.table td:first-child{color:var(--muted)}.table td:last-child{text-align:right;font-variant-numeric:tabular-nums}.pass{color:var(--ok);font-weight:800}.fail{color:var(--bad);font-weight:800}video{display:none;width:100%;border-radius:18px;border:1px solid #23304d;background:#000;max-height:280px}.footer-note{color:#8190b4;font-size:12px}
+@media(max-width:1050px){.grid{grid-template-columns:repeat(2,1fr)}.topbar{grid-template-columns:1fr}.hero{display:block}}@media(max-width:640px){body{padding:16px}.grid{grid-template-columns:1fr}.title{font-size:26px}}
 </style>
 </head>
 <body>
@@ -70,7 +29,7 @@ video{display:none;width:100%;border-radius:18px;border:1px solid #23304d;backgr
   </div>
   <div class="topbar">
     <div class="panel drop" id="drop">
-      <input id="file" type="file" hidden accept="audio/*,video/*,.wav,.mp4,.mov,.mkv"/>
+      <input id="file" type="file" hidden accept="audio/*,video/*,.wav,.mp4,.mov,.mkv" />
       <div class="drop-inner">
         <div class="big">Dépose ton fichier audio ou vidéo</div>
         <div class="hint">WAV PCM 16/24/32 bits · MP3 · AAC · MP4 · MOV · MKV</div>
@@ -132,417 +91,44 @@ video{display:none;width:100%;border-radius:18px;border:1px solid #23304d;backgr
 </div>
 <script>
 'use strict';
-// ─── UTILITAIRES ──────────────────────────────────────────────────────────────
 const $=id=>document.getElementById(id);
 const els={file:$('file'),meta:$('meta'),status:$('status'),progressWrap:$('progressWrap'),bar:$('bar'),progressLabel:$('progressLabel'),progressPct:$('progressPct'),analyze:$('analyze'),reset:$('reset'),preview:$('preview'),browseBtn:$('browseBtn'),modeSelect:$('modeSelect'),modeHint:$('modeHint'),drop:$('drop')};
-let currentFile=null, audioCtx=null;
+let currentFile=null,audioCtx=null;
 const CH_NAMES={1:['Mono'],2:['L','R'],4:['L','R','Ls','Rs'],6:['L','R','C','LFE','Ls','Rs'],8:['L','R','C','LFE','Ls','Rs','Lss','Rss']};
 const CH_COLORS=['#e50914','#3b82f6','#22c55e','#f59e0b','#a855f7','#06b6d4','#f97316','#ec4899'];
 const LFE_MAP={6:3,8:3};
+const BIG_FILE=500*1024*1024;
 const chNames=n=>CH_NAMES[n]||Array.from({length:n},(_,i)=>'Ch'+(i+1));
 const tick=()=>new Promise(r=>setTimeout(r,0));
 const fmt=(v,d=1)=>Number.isFinite(v)?v.toFixed(d):'—';
 const formatSize=b=>b>1e9?(b/1e9).toFixed(2)+' Go':b>1e6?(b/1e6).toFixed(1)+' Mo':(b/1e3).toFixed(0)+' Ko';
 const dur=s=>{if(!Number.isFinite(s))return '—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=Math.floor(s%60);return [h,m,ss].map(v=>String(v).padStart(2,'0')).join(':')};
-
 function setStatus(msg,type='ok'){els.status.className='status '+type;els.status.textContent=msg;els.status.style.display='block'}
 function clearStatus(){els.status.style.display='none'}
 function setProgress(p,msg){els.progressWrap.style.display='block';els.bar.style.width=Math.min(p,100)+'%';els.progressPct.textContent=Math.round(p)+'%';if(msg!=null)els.progressLabel.textContent=msg}
 function hideProgress(){setTimeout(()=>els.progressWrap.style.display='none',600)}
-
-// ─── K-WEIGHTING BS.1770-4 (coefficients calculés par SR) ────────────────────
-function makeKCoeffs(sr){
-  // Stage 1 : pre-filter (high-shelf +4 dB à 1681 Hz)
-  const f0=1681.974450955533,G=3.999843853973347,Q=0.7071752369554196;
-  const K=Math.tan(Math.PI*f0/sr);
-  const Vh=Math.pow(10,G/20),Vb=Math.pow(Vh,0.4996667741545416);
-  const d=1+K/Q+K*K;
-  const s1={b0:(Vh+Vb*K/Q+K*K)/d, b1:2*(K*K-Vh)/d, b2:(Vh-Vb*K/Q+K*K)/d, a1:2*(K*K-1)/d, a2:(1-K/Q+K*K)/d};
-  // Stage 2 : RLB high-pass (38 Hz)
-  const f1=38.13547087602444,Q2=0.5003270373238773;
-  const K2=Math.tan(Math.PI*f1/sr);
-  const d2=1+K2/Q2+K2*K2;
-  const s2={b0:1/d2, b1:-2/d2, b2:1/d2, a1:2*(K2*K2-1)/d2, a2:(1-K2/Q2+K2*K2)/d2};
-  return {s1,s2};
-}
-
-function applyBiquad(data,c){
-  const out=new Float32Array(data.length);
-  let x1=0,x2=0,y1=0,y2=0;
-  for(let i=0;i<data.length;i++){
-    const x=data[i],y=c.b0*x+c.b1*x1+c.b2*x2-c.a1*y1-c.a2*y2;
-    out[i]=y;x2=x1;x1=x;y2=y1;y1=y;
-  }
-  return out;
-}
+function makeKCoeffs(sr){const f0=1681.974450955533,G=3.999843853973347,Q=0.7071752369554196;const K=Math.tan(Math.PI*f0/sr);const Vh=Math.pow(10,G/20),Vb=Math.pow(Vh,0.4996667741545416);const d=1+K/Q+K*K;const s1={b0:(Vh+Vb*K/Q+K*K)/d,b1:2*(K*K-Vh)/d,b2:(Vh-Vb*K/Q+K*K)/d,a1:2*(K*K-1)/d,a2:(1-K/Q+K*K)/d};const f1=38.13547087602444,Q2=0.5003270373238773;const K2=Math.tan(Math.PI*f1/sr);const d2=1+K2/Q2+K2*K2;const s2={b0:1/d2,b1:-2/d2,b2:1/d2,a1:2*(K2*K2-1)/d2,a2:(1-K2/Q2+K2*K2)/d2};return {s1,s2}}
+function applyBiquad(data,c){const out=new Float32Array(data.length);let x1=0,x2=0,y1=0,y2=0;for(let i=0;i<data.length;i++){const x=data[i],y=c.b0*x+c.b1*x1+c.b2*x2-c.a1*y1-c.a2*y2;out[i]=y;x2=x1;x1=x;y2=y1;y1=y}return out}
 function kWeight(data,sr){const c=makeKCoeffs(sr);return applyBiquad(applyBiquad(data,c.s1),c.s2)}
-
-// Pondération canal BS.1770 : surround +1.5 dB, LFE=0
-function chGain(nCh,idx){
-  if((nCh===6||nCh===8)&&idx===LFE_MAP[nCh]) return 0;
-  if((nCh===6||nCh===8)&&idx>=4) return Math.pow(10,1.5/20);
-  return 1.0;
-}
-
-// ─── CALCUL R128 depuis AudioBuffer (moteur éprouvé) ─────────────────────────
-function calcR128fromBuffer(buf, dialogMode){
-  const sr=buf.sampleRate, nCh=buf.numberOfChannels;
-  const STEP=Math.round(0.1*sr); // 100 ms
-  const len=buf.length;
-
-  // K-weight chaque canal
-  const kw=[];
-  for(let c=0;c<nCh;c++) kw.push(kWeight(buf.getChannelData(c).slice(),sr));
-
-  // Gains BS.1770
-  const gains=Array.from({length:nCh},(_,i)=>chGain(nCh,i));
-
-  // Blocs de 100 ms
-  const blocks=[];
-  for(let i=0;i+STEP<=len;i+=STEP){
-    let e=0;
-    for(let c=0;c<nCh;c++){
-      const g=gains[c]; if(!g) continue;
-      let s=0;
-      for(let k=i;k<i+STEP;k++) s+=kw[c][k]*kw[c][k];
-      e+=g*(s/STEP);  // énergie pondérée par canal
-    }
-    blocks.push(e);
-  }
-
-  // Integrated LUFS
-  const ABS=Math.pow(10,(-70+0.691)/10);
-  let gated=blocks.filter(e=>e>ABS);
-  let IL=-Infinity;
-  if(gated.length){
-    if(dialogMode){
-      gated.sort((a,b)=>b-a);
-      gated=gated.slice(0,Math.max(1,Math.floor(gated.length*0.3)));
-    } else {
-      const avg=gated.reduce((s,e)=>s+e,0)/gated.length;
-      gated=gated.filter(e=>e>avg*Math.pow(10,-10/10));
-    }
-    if(gated.length) IL=-0.691+10*Math.log10(gated.reduce((s,e)=>s+e,0)/gated.length);
-  }
-
-  // Momentary max (400 ms = 4 blocs)
-  let M=-Infinity;
-  for(let i=0;i+4<=blocks.length;i++){
-    const e=(blocks[i]+blocks[i+1]+blocks[i+2]+blocks[i+3])/4;
-    const l=-0.691+10*Math.log10(Math.max(e,1e-12));
-    if(l>M) M=l;
-  }
-
-  // Short-term max (3 s = 30 blocs)
-  let S=-Infinity;
-  for(let i=0;i+30<=blocks.length;i++){
-    let e=0; for(let k=0;k<30;k++) e+=blocks[i+k];
-    const l=-0.691+10*Math.log10(Math.max(e/30,1e-12));
-    if(l>S) S=l;
-  }
-
-  // LRA (EBU Tech 3342 : percentiles 10%/95% sur short-term gated)
-  const stL=[];
-  for(let i=0;i+30<=blocks.length;i+=10){
-    let e=0; for(let k=0;k<30;k++) e+=blocks[i+k];
-    const l=-0.691+10*Math.log10(Math.max(e/30,1e-12));
-    if(l>-70) stL.push(l);
-  }
-  let LRA=0;
-  if(stL.length>=2){
-    stL.sort((a,b)=>a-b);
-    LRA=Math.max(0,stL[Math.floor(stL.length*.95)]-stL[Math.floor(stL.length*.10)]);
-  }
-
-  // True Peak (interpolation 4x)
-  let tp=0;
-  for(let c=0;c<nCh;c++){
-    const d=buf.getChannelData(c);
-    for(let i=1;i<d.length-2;i++){
-      // interpolation de Sinc simplifiée (4 points)
-      for(let k=0;k<4;k++){
-        const t=k/4;
-        const s=Math.abs(-t*(1-t)*(1-t)*d[i-1]+((1-t)*(1+t-t*t))*d[i]+(t*(1+(1-t)*t))*d[i+1]-(1-t)*t*t*d[i+2]);
-        if(s>tp) tp=s;
-      }
-    }
-  }
-  const TP=20*Math.log10(Math.max(tp,1e-12));
-
-  return {IL,TP,LRA,M,S,sr,nCh,duration:buf.duration};
-}
-
-// ─── PARSE HEADER WAV ─────────────────────────────────────────────────────────
-function readSlice(file,start,len){
-  return new Promise((res,rej)=>{
-    const r=new FileReader();
-    r.onload=e=>res(e.target.result);
-    r.onerror=()=>rej(new Error('Lecture impossible'));
-    r.readAsArrayBuffer(file.slice(start,start+len));
-  });
-}
-
-async function parseWavHeader(file){
-  const buf=await readSlice(file,0,8192);
-  const v=new DataView(buf),u8=new Uint8Array(buf);
-  const s4=o=>String.fromCharCode(u8[o],u8[o+1],u8[o+2],u8[o+3]);
-  if((s4(0)!=='RIFF'&&s4(0)!=='RF64')||s4(8)!=='WAVE') return null;
-  let pos=12,fmt=null,dataOffset=0,dataSize=0;
-  while(pos<u8.length-8){
-    const id=s4(pos),sz=v.getUint32(pos+4,true);
-    if(id==='fmt '){
-      const af=v.getUint16(pos+8,true),nCh=v.getUint16(pos+10,true),sr=v.getUint32(pos+12,true),bits=v.getUint16(pos+22,true);
-      fmt={nCh,sr,bitsPerSample:bits,isFloat:(af===3)||(af===0xFFFE&&bits===32)};
-    } else if(id==='data'){
-      dataOffset=pos+8; dataSize=(sz===0||sz===0xFFFFFFFF)?0:sz; break;
-    }
-    const next=pos+8+sz+(sz&1); if(next<=pos) break; pos=next;
-  }
-  if(!fmt||!dataOffset) return null;
-  if(!dataSize) dataSize=Math.floor((file.size-dataOffset)/(fmt.nCh*(fmt.bitsPerSample/8)))*(fmt.nCh*(fmt.bitsPerSample/8));
-  return {...fmt,dataOffset,dataSize};
-}
-
-// ─── ANALYSE WAV CHUNKED (pour fichiers > 500 Mo) ────────────────────────────
-async function analyzeWavChunked(file,info,dialogMode){
-  const {nCh,sr,bitsPerSample,isFloat,dataOffset,dataSize}=info;
-  const bps=bitsPerSample/8, bpf=nCh*bps;
-  const totalFrames=Math.floor(dataSize/bpf);
-  const STEP=Math.round(0.1*sr);
-  const CHUNK=Math.floor(20*1024*1024/bpf)*bpf; // ~20 Mo aligné sur des frames
-  const gains=Array.from({length:nCh},(_,i)=>chGain(nCh,i));
-  const kc=makeKCoeffs(sr);
-
-  // État des filtres biquad par canal (persistant entre chunks)
-  const fst=Array.from({length:nCh},()=>({
-    s1:{x1:0,x2:0,y1:0,y2:0},
-    s2:{x1:0,x2:0,y1:0,y2:0}
-  }));
-
-  function kwSample(x,c){
-    const f=fst[c];
-    let y=kc.s1.b0*x+kc.s1.b1*f.s1.x1+kc.s1.b2*f.s1.x2-kc.s1.a1*f.s1.y1-kc.s1.a2*f.s1.y2;
-    f.s1.x2=f.s1.x1;f.s1.x1=x;f.s1.y2=f.s1.y1;f.s1.y1=y;x=y;
-    y=kc.s2.b0*x+kc.s2.b1*f.s2.x1+kc.s2.b2*f.s2.x2-kc.s2.a1*f.s2.y1-kc.s2.a2*f.s2.y2;
-    f.s2.x2=f.s2.x1;f.s2.x1=x;f.s2.y2=f.s2.y1;f.s2.y1=y;
-    return y;
-  }
-
-  // Accumulateurs par bloc de 100ms
-  // stepSum[c] = somme de kw^2 pour le canal c dans le bloc courant
-  const stepSum=new Float64Array(nCh);
-  let stepFill=0;
-  const blocks=[];
-  let truePeak=0;
-  let totalFramesDone=0;
-
-  // Waveform décimée
-  const DECIM=Math.max(1,Math.floor(totalFrames/2000)); // ~2000 points max
-  const waveData=Array.from({length:nCh},()=>[]);
-
-  let pos=dataOffset;
-  const end=dataOffset+dataSize;
-
-  while(pos<end){
-    const chunkBytes=Math.min(CHUNK,end-pos);
-    const chunkBuf=await readSlice(file,pos,chunkBytes);
-    const dv=new DataView(chunkBuf);
-    const u8=new Uint8Array(chunkBuf);
-    const nFrames=Math.floor(chunkBytes/bpf);
-
-    for(let f=0;f<nFrames;f++){
-      const fo=f*bpf;
-      for(let c=0;c<nCh;c++){
-        const bo=fo+c*bps;
-        let raw=0;
-        if(isFloat&&bitsPerSample===32) raw=dv.getFloat32(bo,true);
-        else if(bitsPerSample===24){let v24=u8[bo]|(u8[bo+1]<<8)|(u8[bo+2]<<16);if(v24&0x800000)v24|=0xFF000000;raw=v24/8388608;}
-        else if(bitsPerSample===16) raw=dv.getInt16(bo,true)/32768;
-        else raw=dv.getInt32(bo,true)/2147483648;
-
-        const a=raw<0?-raw:raw; if(a>truePeak) truePeak=a;
-        if((totalFramesDone+f)%DECIM===0) waveData[c].push(raw);
-
-        const kw=kwSample(raw,c);
-        stepSum[c]+=kw*kw;
-      }
-      stepFill++;
-
-      if(stepFill>=STEP){
-        // Bloc de 100ms complet : calculer l'énergie pondérée
-        let e=0;
-        for(let c=0;c<nCh;c++){
-          if(gains[c]>0) e+=gains[c]*(stepSum[c]/STEP);
-          stepSum[c]=0;
-        }
-        blocks.push(e);
-        stepFill=0;
-      }
-    }
-
-    totalFramesDone+=nFrames;
-    pos+=chunkBytes;
-    const pct=totalFramesDone/totalFrames;
-    setProgress(10+pct*80,'Analyse… '+Math.round(pct*100)+'%');
-    await tick();
-  }
-
-  // Flush dernier bloc partiel
-  if(stepFill>0){
-    let e=0;
-    for(let c=0;c<nCh;c++){if(gains[c]>0) e+=gains[c]*(stepSum[c]/stepFill);}
-    blocks.push(e);
-  }
-
-  // Calcul R128 identique au moteur normal
-  const ABS=Math.pow(10,(-70+0.691)/10);
-  let gated=blocks.filter(e=>e>ABS);
-  let IL=-Infinity;
-  if(gated.length){
-    if(dialogMode){gated.sort((a,b)=>b-a);gated=gated.slice(0,Math.max(1,Math.floor(gated.length*.3)));}
-    else{const avg=gated.reduce((s,e)=>s+e,0)/gated.length;gated=gated.filter(e=>e>avg*Math.pow(10,-10/10));}
-    if(gated.length) IL=-0.691+10*Math.log10(gated.reduce((s,e)=>s+e,0)/gated.length);
-  }
-
-  let M=-Infinity;
-  for(let i=0;i+4<=blocks.length;i++){const e=(blocks[i]+blocks[i+1]+blocks[i+2]+blocks[i+3])/4;const l=-0.691+10*Math.log10(Math.max(e,1e-12));if(l>M)M=l;}
-
-  let S=-Infinity;
-  for(let i=0;i+30<=blocks.length;i++){let e=0;for(let k=0;k<30;k++)e+=blocks[i+k];const l=-0.691+10*Math.log10(Math.max(e/30,1e-12));if(l>S)S=l;}
-
-  const stL=[];
-  for(let i=0;i+30<=blocks.length;i+=10){let e=0;for(let k=0;k<30;k++)e+=blocks[i+k];const l=-0.691+10*Math.log10(Math.max(e/30,1e-12));if(l>-70)stL.push(l);}
-  let LRA=0;
-  if(stL.length>=2){stL.sort((a,b)=>a-b);LRA=Math.max(0,stL[Math.floor(stL.length*.95)]-stL[Math.floor(stL.length*.10)]);}
-
-  const TP=20*Math.log10(Math.max(truePeak,1e-12));
-
-  // AudioBuffer pour waveform
-  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-  const wl=Math.max(1,waveData[0].length);
-  const waveBuf=audioCtx.createBuffer(nCh,wl,sr);
-  for(let c=0;c<nCh;c++){const ch=waveBuf.getChannelData(c);for(let i=0;i<wl;i++)ch[i]=waveData[c][i]||0;}
-
-  return {IL,TP,LRA,M,S,sr,nCh,duration:totalFrames/sr,waveBuf};
-}
-
-// ─── WAVEFORM ─────────────────────────────────────────────────────────────────
-function drawWaveform(buf){
-  const nCh=buf.numberOfChannels,names=chNames(nCh);
-  const legend=$('chLegend');legend.innerHTML='';
-  names.forEach((n,i)=>{const d=document.createElement('div');d.className='ch-dot';d.innerHTML=`<div class="dot" style="background:${CH_COLORS[i]||'#fff'};opacity:${LFE_MAP[nCh]===i?.4:1}"></div>${n}`;legend.appendChild(d);});
-  const canvas=$('waveCanvas'),W=canvas.offsetWidth||1100,H=220;
-  canvas.width=W;canvas.height=H;
-  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,H);
-  const rowH=H/nCh;
-  for(let c=0;c<nCh;c++){
-    const data=buf.getChannelData(c),isLFE=LFE_MAP[nCh]===c,color=CH_COLORS[c]||'#fff';
-    const mid=rowH*c+rowH/2,amp=rowH/2*.88*(isLFE?.4:1);
-    const step=Math.max(1,Math.floor(data.length/W));
-    ctx.strokeStyle=color;ctx.globalAlpha=isLFE?.3:.75;ctx.lineWidth=1;ctx.beginPath();
-    for(let x=0;x<W;x++){let mn=1,mx=-1;for(let j=x*step;j<(x+1)*step&&j<data.length;j++){if(data[j]<mn)mn=data[j];if(data[j]>mx)mx=data[j];}ctx.moveTo(x,mid-mx*amp);ctx.lineTo(x,mid-mn*amp);}
-    ctx.stroke();ctx.globalAlpha=.18;ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(0,mid);ctx.lineTo(W,mid);ctx.stroke();
-    ctx.globalAlpha=.7;ctx.fillStyle=color;ctx.font='bold 11px Inter,sans-serif';ctx.fillText(names[c],8,rowH*c+14);
-  }
-  ctx.globalAlpha=1;
-}
-
-// ─── AFFICHAGE ────────────────────────────────────────────────────────────────
-function displayResults(res,waveBuf){
-  const {IL,TP,LRA,M,S,sr,nCh,duration}=res;
-  const ilOk=IL>=-27&&IL<=-21,tpOk=TP<=-1,lraOk=LRA<=20;
-  $('cIL').className='panel card '+(ilOk?'ok':'bad');$('vIL').textContent=fmt(IL);
-  $('mainLabel').textContent=els.modeSelect.value==='dialog'?'Dialog-Gated':'Integrated';
-  $('cTP').className='panel card '+(tpOk?'ok':'bad');$('vTP').textContent=fmt(TP);
-  $('cLRA').className='panel card '+(lraOk?'ok':'bad');$('vLRA').textContent=fmt(LRA);
-  $('vM').textContent=fmt(M);$('vS').textContent=fmt(S);
-  $('rMode').textContent=els.modeSelect.value==='dialog'?'Dialog-Gated (approx.)':'Standard BS.1770-4';
-  $('rIL').textContent=fmt(IL)+' LKFS';$('rTP').textContent=fmt(TP)+' dBTP';
-  $('rLRA').textContent=fmt(LRA)+' LU';$('rM').textContent=fmt(M)+' LUFS';$('rS').textContent=fmt(S)+' LUFS';
-  $('rD').textContent=dur(duration);$('rC').textContent=nCh+' ('+chNames(nCh).join(', ')+')';
-  $('rSR').textContent=sr>=1000?(sr/1000).toFixed(1)+' kHz':sr+' Hz';
-  $('rN').innerHTML=ilOk&&tpOk?'<span class="pass">✓ Conforme (−24±3 LKFS, TP≤−1)</span>':'<span class="fail">✗ Non conforme</span>';
-  $('report').style.display='block';
-  if(waveBuf) drawWaveform(waveBuf);
-  hideProgress();
-  setStatus('✓ Terminé — '+fmt(IL)+' LKFS · TP '+fmt(TP)+' dBTP · LRA '+fmt(LRA)+' LU','ok');
-}
-
-// ─── PIPELINE PRINCIPAL ───────────────────────────────────────────────────────
-const BIG_FILE=500*1024*1024; // 500 Mo : seuil chunked
-
-function loadFile(f){
-  currentFile=f;els.meta.textContent=f.name+' — '+formatSize(f.size);
-  els.analyze.disabled=false;clearStatus();
-  const isVideo=/\.(mp4|mov|mkv|webm)$/i.test(f.name);
-  if(isVideo){els.preview.src=URL.createObjectURL(f);els.preview.style.display='block';}
-  else{els.preview.style.display='none';els.preview.src='';}
-}
-
-async function startAnalysis(){
-  if(els.file.files&&els.file.files[0]) currentFile=els.file.files[0];
-  if(!currentFile) return;
-  els.analyze.disabled=true;clearStatus();$('report').style.display='none';
-  setProgress(2,'Initialisation…');await tick();
-  try{
-    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-    if(audioCtx.state==='suspended') await audioCtx.resume();
-    const dialogMode=els.modeSelect.value==='dialog';
-    const isWav=/\.wav$/i.test(currentFile.name);
-    const isBig=currentFile.size>BIG_FILE;
-
-    if(isWav&&isBig){
-      // Gros WAV : pipeline chunked (évite l'out-of-memory)
-      setProgress(5,'Lecture header WAV…');await tick();
-      const info=await parseWavHeader(currentFile);
-      if(!info) throw new Error('Header WAV non reconnu. Vérifier que le fichier est un WAV PCM standard.');
-      console.log('[R128] WAV chunked:', info, formatSize(currentFile.size));
-      const res=await analyzeWavChunked(currentFile,info,dialogMode);
-      displayResults(res,res.waveBuf);
-    } else {
-      // Fichiers normaux : decodeAudioData natif (calcul éprouvé)
-      setProgress(5,'Chargement…');await tick();
-      const ab=await new Promise((res,rej)=>{
-        const r=new FileReader();
-        r.onload=e=>res(e.target.result);
-        r.onerror=()=>rej(new Error('Lecture impossible'));
-        r.readAsArrayBuffer(currentFile);
-      });
-      setProgress(40,'Décodage audio…');await tick();
-      const decoded=await new Promise((res,rej)=>
-        audioCtx.decodeAudioData(ab,res,()=>rej(new Error('Format non supporté. Pour les WAV multicanaux utilisez un WAV PCM 48kHz 16/24-bit.')))
-      );
-      setProgress(60,'Analyse R128…');await tick();
-      const stats=calcR128fromBuffer(decoded,dialogMode);
-      displayResults(stats,decoded);
-    }
-  }catch(e){
-    hideProgress();console.error('[R128]',e);
-    setStatus('Erreur : '+(e.message||e),'err');
-  }
-  els.analyze.disabled=false;
-}
-
-function doReset(){
-  currentFile=null;els.file.value='';els.meta.textContent='Aucun fichier chargé';
-  els.analyze.disabled=true;clearStatus();els.progressWrap.style.display='none';
-  els.preview.style.display='none';els.preview.src='';$('report').style.display='none';
-  ['vIL','vTP','vLRA','vM','vS'].forEach(id=>$(id).textContent='—');
-  ['cIL','cTP','cLRA','cM','cS'].forEach(id=>$(id).className='panel card');
-  $('chLegend').innerHTML='';
-  const cv=$('waveCanvas');cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
-}
-
-// ─── EVENTS ───────────────────────────────────────────────────────────────────
-els.browseBtn.addEventListener('click',e=>{e.preventDefault();els.file.click();});
-els.file.addEventListener('change',()=>{if(els.file.files[0]) loadFile(els.file.files[0]);});
-els.analyze.addEventListener('click',e=>{e.preventDefault();startAnalysis();});
-els.reset.addEventListener('click',e=>{e.preventDefault();doReset();});
-els.drop.addEventListener('dragover',e=>{e.preventDefault();els.drop.classList.add('drag');});
-els.drop.addEventListener('dragleave',()=>els.drop.classList.remove('drag'));
-els.drop.addEventListener('drop',e=>{e.preventDefault();els.drop.classList.remove('drag');if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);});
-els.modeSelect.addEventListener('change',()=>{els.modeHint.textContent=els.modeSelect.value==='dialog'?'Mode dialog-gated · parole':'Mode standard · BS.1770-4';});
-window.addEventListener('resize',()=>{const cv=$('waveCanvas');if(cv.width>0){const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);}});
+function chGain(nCh,idx){if((nCh===6||nCh===8)&&idx===LFE_MAP[nCh]) return 0;if((nCh===6||nCh===8)&&idx>=4) return Math.pow(10,1.5/20);return 1}
+function interpTruePeak4(samples){let peak=0;for(let i=1;i<samples.length-2;i++){for(let k=0;k<8;k++){const t=k/8;const s=Math.abs(-t*(1-t)*(1-t)*samples[i-1]+((1-t)*(1+t-t*t))*samples[i]+(t*(1+(1-t)*t))*samples[i+1]-(1-t)*t*t*samples[i+2]);if(s>peak) peak=s}}return peak}
+function lufsFromEnergy(e){return -0.691+10*Math.log10(Math.max(e,1e-12))}
+function computeIntegratedFrom100ms(blocks,dialogMode){const gateBlocks=[];for(let i=0;i+4<=blocks.length;i++){let e=0;for(let k=0;k<4;k++)e+=blocks[i+k];e/=4;gateBlocks.push(e)}const absGate=Math.pow(10,(-70+0.691)/10);let gated=gateBlocks.filter(e=>e>absGate);if(!gated.length)return -Infinity;if(dialogMode){gated.sort((a,b)=>b-a);gated=gated.slice(0,Math.max(1,Math.floor(gated.length*0.3)))}else{const avg=gated.reduce((s,e)=>s+e,0)/gated.length;const rel=avg*Math.pow(10,-10/10);gated=gated.filter(e=>e>rel)}if(!gated.length)return -Infinity;return lufsFromEnergy(gated.reduce((s,e)=>s+e,0)/gated.length)}
+function computeMomentaryMax(blocks){let m=-Infinity;for(let i=0;i+4<=blocks.length;i++){let e=0;for(let k=0;k<4;k++)e+=blocks[i+k];m=Math.max(m,lufsFromEnergy(e/4))}return m}
+function computeShortTermMax(blocks){let s=-Infinity;for(let i=0;i+30<=blocks.length;i++){let e=0;for(let k=0;k<30;k++)e+=blocks[i+k];s=Math.max(s,lufsFromEnergy(e/30))}return s}
+function computeLRA(blocks){const st=[];for(let i=0;i+30<=blocks.length;i++){let e=0;for(let k=0;k<30;k++)e+=blocks[i+k];st.push(lufsFromEnergy(e/30))}const abs=st.filter(v=>v>=-70);if(!abs.length)return 0;const stPower=abs.reduce((s,v)=>s+Math.pow(10,v/10),0)/abs.length;const stIntegrated=10*Math.log10(stPower);const relGated=abs.filter(v=>v>=stIntegrated-20);if(!relGated.length)return 0;const sorted=relGated.slice().sort((a,b)=>a-b);const n=sorted.length;const low=sorted[Math.round((n-1)*0.10)];const high=sorted[Math.round((n-1)*0.95)];return Math.max(0,high-low)}
+function calcR128fromBuffer(buf,dialogMode){const sr=buf.sampleRate,nCh=buf.numberOfChannels,STEP=Math.round(0.1*sr),len=buf.length;const kw=[];for(let c=0;c<nCh;c++)kw.push(kWeight(buf.getChannelData(c).slice(),sr));const gains=Array.from({length:nCh},(_,i)=>chGain(nCh,i));const blocks=[];for(let i=0;i+STEP<=len;i+=STEP){let e=0;for(let c=0;c<nCh;c++){const g=gains[c];if(!g)continue;let s=0;for(let k=i;k<i+STEP;k++)s+=kw[c][k]*kw[c][k];e+=g*(s/STEP)}blocks.push(e)}const IL=computeIntegratedFrom100ms(blocks,dialogMode);const M=computeMomentaryMax(blocks);const S=computeShortTermMax(blocks);const LRA=computeLRA(blocks);let tp=0;for(let c=0;c<nCh;c++)tp=Math.max(tp,interpTruePeak4(buf.getChannelData(c)));const TP=20*Math.log10(Math.max(tp,1e-12));return {IL,TP,LRA,M,S,sr,nCh,duration:buf.duration}}
+function readSlice(file,start,len){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Lecture impossible'));r.readAsArrayBuffer(file.slice(start,start+len))})}
+async function parseWavHeader(file){const buf=await readSlice(file,0,8192);const v=new DataView(buf),u8=new Uint8Array(buf);const s4=o=>String.fromCharCode(u8[o],u8[o+1],u8[o+2],u8[o+3]);if((s4(0)!=='RIFF'&&s4(0)!=='RF64')||s4(8)!=='WAVE')return null;let pos=12,fmt=null,dataOffset=0,dataSize=0;while(pos<u8.length-8){const id=s4(pos),sz=v.getUint32(pos+4,true);if(id==='fmt '){const af=v.getUint16(pos+8,true),nCh=v.getUint16(pos+10,true),sr=v.getUint32(pos+12,true),bits=v.getUint16(pos+22,true);fmt={nCh,sr,bitsPerSample:bits,isFloat:(af===3)||(af===0xFFFE&&bits===32)}}else if(id==='data'){dataOffset=pos+8;dataSize=(sz===0||sz===0xFFFFFFFF)?0:sz;break}const next=pos+8+sz+(sz&1);if(next<=pos)break;pos=next}if(!fmt||!dataOffset)return null;if(!dataSize)dataSize=Math.floor((file.size-dataOffset)/(fmt.nCh*(fmt.bitsPerSample/8)))*(fmt.nCh*(fmt.bitsPerSample/8));return {...fmt,dataOffset,dataSize}}
+async function analyzeWavChunked(file,info,dialogMode){const {nCh,sr,bitsPerSample,isFloat,dataOffset,dataSize}=info;const bps=bitsPerSample/8,bpf=nCh*bps,totalFrames=Math.floor(dataSize/bpf),STEP=Math.round(0.1*sr),CHUNK=Math.floor(20*1024*1024/bpf)*bpf;const gains=Array.from({length:nCh},(_,i)=>chGain(nCh,i));const kc=makeKCoeffs(sr);const fst=Array.from({length:nCh},()=>({s1:{x1:0,x2:0,y1:0,y2:0},s2:{x1:0,x2:0,y1:0,y2:0}}));function kwSample(x,c){const f=fst[c];let y=kc.s1.b0*x+kc.s1.b1*f.s1.x1+kc.s1.b2*f.s1.x2-kc.s1.a1*f.s1.y1-kc.s1.a2*f.s1.y2;f.s1.x2=f.s1.x1;f.s1.x1=x;f.s1.y2=f.s1.y1;f.s1.y1=y;x=y;y=kc.s2.b0*x+kc.s2.b1*f.s2.x1+kc.s2.b2*f.s2.x2-kc.s2.a1*f.s2.y1-kc.s2.a2*f.s2.y2;f.s2.x2=f.s2.x1;f.s2.x1=x;f.s2.y2=f.s2.y1;f.s2.y1=y;return y}
+const stepSum=new Float64Array(nCh);let stepFill=0;const blocks=[];let truePeak=0;let totalFramesDone=0;const DECIM=Math.max(1,Math.floor(totalFrames/2000));const waveData=Array.from({length:nCh},()=>[]);const tpHist=Array.from({length:nCh},()=>[0,0,0]);let pos=dataOffset,end=dataOffset+dataSize;
+while(pos<end){const chunkBytes=Math.min(CHUNK,end-pos);const chunkBuf=await readSlice(file,pos,chunkBytes);const dv=new DataView(chunkBuf);const u8=new Uint8Array(chunkBuf);const nFrames=Math.floor(chunkBytes/bpf);for(let f=0;f<nFrames;f++){const fo=f*bpf;for(let c=0;c<nCh;c++){const bo=fo+c*bps;let raw=0;if(isFloat&&bitsPerSample===32)raw=dv.getFloat32(bo,true);else if(bitsPerSample===24){let v24=u8[bo]|(u8[bo+1]<<8)|(u8[bo+2]<<16);if(v24&0x800000)v24|=0xFF000000;raw=v24/8388608}else if(bitsPerSample===16)raw=dv.getInt16(bo,true)/32768;else raw=dv.getInt32(bo,true)/2147483648;const hist=tpHist[c];const arr=[hist[0],hist[1],hist[2],raw];for(let k=0;k<8;k++){const t=k/8;const s=Math.abs(-t*(1-t)*(1-t)*arr[0]+((1-t)*(1+t-t*t))*arr[1]+(t*(1+(1-t)*t))*arr[2]-(1-t)*t*t*arr[3]);if(s>truePeak)truePeak=s}hist[0]=hist[1];hist[1]=hist[2];hist[2]=raw;if(Math.abs(raw)>truePeak)truePeak=Math.abs(raw);if((totalFramesDone+f)%DECIM===0)waveData[c].push(raw);const kw=kwSample(raw,c);stepSum[c]+=kw*kw}stepFill++;if(stepFill>=STEP){let e=0;for(let c=0;c<nCh;c++){if(gains[c]>0)e+=gains[c]*(stepSum[c]/STEP);stepSum[c]=0}blocks.push(e);stepFill=0}}totalFramesDone+=nFrames;pos+=chunkBytes;const pct=totalFramesDone/totalFrames;setProgress(10+pct*80,'Analyse… '+Math.round(pct*100)+'%');await tick()}if(stepFill>0){let e=0;for(let c=0;c<nCh;c++){if(gains[c]>0)e+=gains[c]*(stepSum[c]/stepFill)}blocks.push(e)}const IL=computeIntegratedFrom100ms(blocks,dialogMode);const M=computeMomentaryMax(blocks);const S=computeShortTermMax(blocks);const LRA=computeLRA(blocks);const TP=20*Math.log10(Math.max(truePeak,1e-12));if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();const wl=Math.max(1,waveData[0].length);const waveBuf=audioCtx.createBuffer(nCh,wl,sr);for(let c=0;c<nCh;c++){const ch=waveBuf.getChannelData(c);for(let i=0;i<wl;i++)ch[i]=waveData[c][i]||0}return {IL,TP,LRA,M,S,sr,nCh,duration:totalFrames/sr,waveBuf}}
+function drawWaveform(buf){const nCh=buf.numberOfChannels,names=chNames(nCh);const legend=$('chLegend');legend.innerHTML='';names.forEach((n,i)=>{const d=document.createElement('div');d.className='ch-dot';d.innerHTML=`<div class="dot" style="background:${CH_COLORS[i]||'#fff'};opacity:${LFE_MAP[nCh]===i?.4:1}"></div>${n}`;legend.appendChild(d)});const canvas=$('waveCanvas'),W=canvas.offsetWidth||1100,H=220;canvas.width=W;canvas.height=H;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,H);const rowH=H/nCh;for(let c=0;c<nCh;c++){const data=buf.getChannelData(c),isLFE=LFE_MAP[nCh]===c,color=CH_COLORS[c]||'#fff';const mid=rowH*c+rowH/2,amp=rowH/2*.88*(isLFE?.4:1);const step=Math.max(1,Math.floor(data.length/W));ctx.strokeStyle=color;ctx.globalAlpha=isLFE?.3:.75;ctx.lineWidth=1;ctx.beginPath();for(let x=0;x<W;x++){let mn=1,mx=-1;for(let j=x*step;j<(x+1)*step&&j<data.length;j++){if(data[j]<mn)mn=data[j];if(data[j]>mx)mx=data[j]}ctx.moveTo(x,mid-mx*amp);ctx.lineTo(x,mid-mn*amp)}ctx.stroke();ctx.globalAlpha=.18;ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(0,mid);ctx.lineTo(W,mid);ctx.stroke();ctx.globalAlpha=.7;ctx.fillStyle=color;ctx.font='bold 11px Inter,sans-serif';ctx.fillText(names[c],8,rowH*c+14)}ctx.globalAlpha=1}
+function displayResults(res,waveBuf){const {IL,TP,LRA,M,S,sr,nCh,duration}=res;const ilOk=IL>=-27&&IL<=-21,tpOk=TP<=-1,lraOk=LRA<=20;$('cIL').className='panel card '+(ilOk?'ok':'bad');$('vIL').textContent=fmt(IL);$('mainLabel').textContent=els.modeSelect.value==='dialog'?'Dialog-Gated':'Integrated';$('cTP').className='panel card '+(tpOk?'ok':'bad');$('vTP').textContent=fmt(TP);$('cLRA').className='panel card '+(lraOk?'ok':'bad');$('vLRA').textContent=fmt(LRA);$('vM').textContent=fmt(M);$('vS').textContent=fmt(S);$('rMode').textContent=els.modeSelect.value==='dialog'?'Dialog-Gated (approx.)':'Standard BS.1770-4';$('rIL').textContent=fmt(IL)+' LKFS';$('rTP').textContent=fmt(TP)+' dBTP';$('rLRA').textContent=fmt(LRA)+' LU';$('rM').textContent=fmt(M)+' LUFS';$('rS').textContent=fmt(S)+' LUFS';$('rD').textContent=dur(duration);$('rC').textContent=nCh+' ('+chNames(nCh).join(', ')+')';$('rSR').textContent=sr>=1000?(sr/1000).toFixed(1)+' kHz':sr+' Hz';$('rN').innerHTML=ilOk&&tpOk?'<span class="pass">✓ Conforme (−24±3 LKFS, TP≤−1)</span>':'<span class="fail">✗ Non conforme</span>';$('report').style.display='block';if(waveBuf)drawWaveform(waveBuf);hideProgress();setStatus('✓ Terminé — '+fmt(IL)+' LKFS · TP '+fmt(TP)+' dBTP · LRA '+fmt(LRA)+' LU','ok')}
+function loadFile(f){currentFile=f;els.meta.textContent=f.name+' — '+formatSize(f.size);els.analyze.disabled=false;clearStatus();const isVideo=/\.(mp4|mov|mkv|webm)$/i.test(f.name);if(isVideo){els.preview.src=URL.createObjectURL(f);els.preview.style.display='block'}else{els.preview.style.display='none';els.preview.src=''}}
+async function startAnalysis(){if(els.file.files&&els.file.files[0])currentFile=els.file.files[0];if(!currentFile)return;els.analyze.disabled=true;clearStatus();$('report').style.display='none';setProgress(2,'Initialisation…');await tick();try{if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')await audioCtx.resume();const dialogMode=els.modeSelect.value==='dialog';const isWav=/\.wav$/i.test(currentFile.name);const isBig=currentFile.size>BIG_FILE;if(isWav&&isBig){setProgress(5,'Lecture header WAV…');await tick();const info=await parseWavHeader(currentFile);if(!info)throw new Error('Header WAV non reconnu. Vérifier que le fichier est un WAV PCM standard.');const res=await analyzeWavChunked(currentFile,info,dialogMode);displayResults(res,res.waveBuf)}else{setProgress(5,'Chargement…');await tick();const ab=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Lecture impossible'));r.readAsArrayBuffer(currentFile)});setProgress(40,'Décodage audio…');await tick();const decoded=await new Promise((res,rej)=>audioCtx.decodeAudioData(ab,res,()=>rej(new Error('Format non supporté. Pour les WAV multicanaux utilisez un WAV PCM 48kHz 16/24-bit.'))));setProgress(60,'Analyse R128…');await tick();const stats=calcR128fromBuffer(decoded,dialogMode);displayResults(stats,decoded)}}catch(e){hideProgress();console.error('[R128]',e);setStatus('Erreur : '+(e.message||e),'err')}els.analyze.disabled=false}
+function doReset(){currentFile=null;els.file.value='';els.meta.textContent='Aucun fichier chargé';els.analyze.disabled=true;clearStatus();els.progressWrap.style.display='none';els.preview.style.display='none';els.preview.src='';$('report').style.display='none';['vIL','vTP','vLRA','vM','vS'].forEach(id=>$(id).textContent='—');['cIL','cTP','cLRA','cM','cS'].forEach(id=>$(id).className='panel card');$('chLegend').innerHTML='';const cv=$('waveCanvas');cv.getContext('2d').clearRect(0,0,cv.width,cv.height)}
+els.browseBtn.addEventListener('click',e=>{e.preventDefault();els.file.click()});els.file.addEventListener('change',()=>{if(els.file.files[0])loadFile(els.file.files[0])});els.analyze.addEventListener('click',e=>{e.preventDefault();startAnalysis()});els.reset.addEventListener('click',e=>{e.preventDefault();doReset()});els.drop.addEventListener('dragover',e=>{e.preventDefault();els.drop.classList.add('drag')});els.drop.addEventListener('dragleave',()=>els.drop.classList.remove('drag'));els.drop.addEventListener('drop',e=>{e.preventDefault();els.drop.classList.remove('drag');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0])});els.modeSelect.addEventListener('change',()=>{els.modeHint.textContent=els.modeSelect.value==='dialog'?'Mode dialog-gated · parole':'Mode standard · BS.1770-4'});window.addEventListener('resize',()=>{const cv=$('waveCanvas');if(cv.width>0){const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height)}});
 </script>
 </body>
 </html>
