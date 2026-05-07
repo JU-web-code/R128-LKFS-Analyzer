@@ -68,7 +68,6 @@ video{display:none;width:100%;border-radius:18px;border:1px solid #23304d;backgr
     </div>
     <div class="badge">Mono · Stéréo · 5.1 · 7.1</div>
   </div>
-
   <div class="topbar">
     <div class="panel drop" id="drop">
       <input id="file" type="file" hidden accept="audio/*,video/*,.wav,.mp4,.mov,.mkv"/>
@@ -101,7 +100,6 @@ video{display:none;width:100%;border-radius:18px;border:1px solid #23304d;backgr
       <div class="footer-note" style="margin-top:12px">Traitement 100 % local · Aucun fichier envoyé</div>
     </div>
   </div>
-
   <div class="grid">
     <div class="panel card" id="cIL"><div class="lab" id="mainLabel">Integrated</div><div class="val" id="vIL">—</div><div class="unit">LKFS</div><div class="spec">Netflix: −24 ±3</div></div>
     <div class="panel card" id="cTP"><div class="lab">True Peak</div><div class="val" id="vTP">—</div><div class="unit">dBTP</div><div class="spec">Max: −1 dBTP</div></div>
@@ -109,7 +107,6 @@ video{display:none;width:100%;border-radius:18px;border:1px solid #23304d;backgr
     <div class="panel card" id="cM"><div class="lab">Momentary Max</div><div class="val" id="vM">—</div><div class="unit">LUFS</div><div class="spec">Fenêtre 400 ms</div></div>
     <div class="panel card" id="cS"><div class="lab">Short-Term Max</div><div class="val" id="vS">—</div><div class="unit">LUFS</div><div class="spec">Fenêtre 3 s</div></div>
   </div>
-
   <div class="panel section">
     <div class="section-head">
       <div class="section-title">Waveform par canal</div>
@@ -117,7 +114,6 @@ video{display:none;width:100%;border-radius:18px;border:1px solid #23304d;backgr
     </div>
     <canvas id="waveCanvas" height="220"></canvas>
   </div>
-
   <div class="panel section report" id="report">
     <div class="section-head"><div class="section-title">Rapport</div></div>
     <table class="table">
@@ -134,506 +130,419 @@ video{display:none;width:100%;border-radius:18px;border:1px solid #23304d;backgr
     </table>
   </div>
 </div>
-
 <script>
+'use strict';
 // ─── UTILITAIRES ──────────────────────────────────────────────────────────────
 const $=id=>document.getElementById(id);
 const els={file:$('file'),meta:$('meta'),status:$('status'),progressWrap:$('progressWrap'),bar:$('bar'),progressLabel:$('progressLabel'),progressPct:$('progressPct'),analyze:$('analyze'),reset:$('reset'),preview:$('preview'),browseBtn:$('browseBtn'),modeSelect:$('modeSelect'),modeHint:$('modeHint'),drop:$('drop')};
 let currentFile=null, audioCtx=null;
-
 const CH_NAMES={1:['Mono'],2:['L','R'],4:['L','R','Ls','Rs'],6:['L','R','C','LFE','Ls','Rs'],8:['L','R','C','LFE','Ls','Rs','Lss','Rss']};
 const CH_COLORS=['#e50914','#3b82f6','#22c55e','#f59e0b','#a855f7','#06b6d4','#f97316','#ec4899'];
 const LFE_MAP={6:3,8:3};
-
 const chNames=n=>CH_NAMES[n]||Array.from({length:n},(_,i)=>'Ch'+(i+1));
 const tick=()=>new Promise(r=>setTimeout(r,0));
 const fmt=(v,d=1)=>Number.isFinite(v)?v.toFixed(d):'—';
-const lufsFromEnergy=e=>-0.691+10*Math.log10(Math.max(e,1e-12));
+const formatSize=b=>b>1e9?(b/1e9).toFixed(2)+' Go':b>1e6?(b/1e6).toFixed(1)+' Mo':(b/1e3).toFixed(0)+' Ko';
+const dur=s=>{if(!Number.isFinite(s))return '—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=Math.floor(s%60);return [h,m,ss].map(v=>String(v).padStart(2,'0')).join(':')};
 
 function setStatus(msg,type='ok'){els.status.className='status '+type;els.status.textContent=msg;els.status.style.display='block'}
 function clearStatus(){els.status.style.display='none'}
-function setProgress(p,msg){els.progressWrap.style.display='block';els.bar.style.width=p+'%';els.progressPct.textContent=Math.round(p)+'%';if(msg!=null) els.progressLabel.textContent=msg}
+function setProgress(p,msg){els.progressWrap.style.display='block';els.bar.style.width=Math.min(p,100)+'%';els.progressPct.textContent=Math.round(p)+'%';if(msg!=null)els.progressLabel.textContent=msg}
 function hideProgress(){setTimeout(()=>els.progressWrap.style.display='none',600)}
 
-function dur(s){
-  if(!Number.isFinite(s)) return '—';
-  const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=Math.floor(s%60);
-  return [h,m,ss].map(v=>String(v).padStart(2,'0')).join(':');
+// ─── K-WEIGHTING BS.1770-4 (coefficients calculés par SR) ────────────────────
+function makeKCoeffs(sr){
+  // Stage 1 : pre-filter (high-shelf +4 dB à 1681 Hz)
+  const f0=1681.974450955533,G=3.999843853973347,Q=0.7071752369554196;
+  const K=Math.tan(Math.PI*f0/sr);
+  const Vh=Math.pow(10,G/20),Vb=Math.pow(Vh,0.4996667741545416);
+  const d=1+K/Q+K*K;
+  const s1={b0:(Vh+Vb*K/Q+K*K)/d, b1:2*(K*K-Vh)/d, b2:(Vh-Vb*K/Q+K*K)/d, a1:2*(K*K-1)/d, a2:(1-K/Q+K*K)/d};
+  // Stage 2 : RLB high-pass (38 Hz)
+  const f1=38.13547087602444,Q2=0.5003270373238773;
+  const K2=Math.tan(Math.PI*f1/sr);
+  const d2=1+K2/Q2+K2*K2;
+  const s2={b0:1/d2, b1:-2/d2, b2:1/d2, a1:2*(K2*K2-1)/d2, a2:(1-K2/Q2+K2*K2)/d2};
+  return {s1,s2};
 }
 
-function formatSize(b){
-  if(b>1e9) return (b/1e9).toFixed(2)+' Go';
-  if(b>1e6) return (b/1e6).toFixed(1)+' Mo';
-  return (b/1e3).toFixed(0)+' Ko';
-}
-
-// ─── K-WEIGHTING BS.1770-4 (coefficients officiels 48 kHz) ───────────────────
-// Source: ITU-R BS.1770-4 Table 1 + pre-filter stage
-// Ces coefficients sont calculés dynamiquement selon le SR
-function makeKWeightCoeffs(sr) {
-  // Stage 1 : Pre-filter (high-shelf)
-  const f0 = 1681.974450955533;
-  const G  = 3.999843853973347;
-  const Q  = 0.7071752369554196;
-  const K  = Math.tan(Math.PI * f0 / sr);
-  const Vh = Math.pow(10, G / 20);
-  const Vb = Math.pow(Vh, 0.4996667741545416);
-  const a0s = 1 + K / Q + K * K;
-  const b0s = (Vh + Vb * K / Q + K * K) / a0s;
-  const b1s = 2 * (K * K - Vh) / a0s;
-  const b2s = (Vh - Vb * K / Q + K * K) / a0s;
-  const a1s = 2 * (K * K - 1) / a0s;
-  const a2s = (1 - K / Q + K * K) / a0s;
-
-  // Stage 2 : High-pass RLB (2nd order, 38 Hz)
-  const f1 = 38.13547087602444;
-  const Q2 = 0.5003270373238773;
-  const K2 = Math.tan(Math.PI * f1 / sr);
-  const a0h = 1 + K2 / Q2 + K2 * K2;
-  const b0h =  1 / a0h;
-  const b1h = -2 / a0h;
-  const b2h =  1 / a0h;
-  const a1h = 2 * (K2 * K2 - 1) / a0h;
-  const a2h = (1 - K2 / Q2 + K2 * K2) / a0h;
-
-  return {
-    s1:{b0:b0s,b1:b1s,b2:b2s,a1:a1s,a2:a2s},
-    s2:{b0:b0h,b1:b1h,b2:b2h,a1:a1h,a2:a2h}
-  };
-}
-
-function applyBiquad(data, c) {
-  const out = new Float32Array(data.length);
+function applyBiquad(data,c){
+  const out=new Float32Array(data.length);
   let x1=0,x2=0,y1=0,y2=0;
   for(let i=0;i<data.length;i++){
-    const x=data[i];
-    const y=c.b0*x+c.b1*x1+c.b2*x2-c.a1*y1-c.a2*y2;
-    out[i]=y; x2=x1; x1=x; y2=y1; y1=y;
+    const x=data[i],y=c.b0*x+c.b1*x1+c.b2*x2-c.a1*y1-c.a2*y2;
+    out[i]=y;x2=x1;x1=x;y2=y1;y1=y;
   }
   return out;
 }
+function kWeight(data,sr){const c=makeKCoeffs(sr);return applyBiquad(applyBiquad(data,c.s1),c.s2)}
 
-function kWeight(data, sr) {
-  const c = makeKWeightCoeffs(sr);
-  return applyBiquad(applyBiquad(data, c.s1), c.s2);
-}
-
-// Pondération canal BS.1770 (5.1/7.1 : surrounds +1.5 dB, LFE exclu)
-function chGain(nCh, idx) {
-  if((nCh===6||nCh===8) && idx===LFE_MAP[nCh]) return 0;
-  if((nCh===6||nCh===8) && idx>=4) return Math.pow(10, 1.5/20);
+// Pondération canal BS.1770 : surround +1.5 dB, LFE=0
+function chGain(nCh,idx){
+  if((nCh===6||nCh===8)&&idx===LFE_MAP[nCh]) return 0;
+  if((nCh===6||nCh===8)&&idx>=4) return Math.pow(10,1.5/20);
   return 1.0;
 }
 
-// ─── LECTURE FICHIER PAR SLICE (évite le chargement complet en RAM) ───────────
-function readSlice(file, start, length) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload  = e => resolve(e.target.result);
-    r.onerror = () => reject(new Error('FileReader error: ' + (r.error ? r.error.message : 'unknown')));
-    r.readAsArrayBuffer(file.slice(start, start + length));
+// ─── CALCUL R128 depuis AudioBuffer (moteur éprouvé) ─────────────────────────
+function calcR128fromBuffer(buf, dialogMode){
+  const sr=buf.sampleRate, nCh=buf.numberOfChannels;
+  const STEP=Math.round(0.1*sr); // 100 ms
+  const len=buf.length;
+
+  // K-weight chaque canal
+  const kw=[];
+  for(let c=0;c<nCh;c++) kw.push(kWeight(buf.getChannelData(c).slice(),sr));
+
+  // Gains BS.1770
+  const gains=Array.from({length:nCh},(_,i)=>chGain(nCh,i));
+
+  // Blocs de 100 ms
+  const blocks=[];
+  for(let i=0;i+STEP<=len;i+=STEP){
+    let e=0;
+    for(let c=0;c<nCh;c++){
+      const g=gains[c]; if(!g) continue;
+      let s=0;
+      for(let k=i;k<i+STEP;k++) s+=kw[c][k]*kw[c][k];
+      e+=g*(s/STEP);  // énergie pondérée par canal
+    }
+    blocks.push(e);
+  }
+
+  // Integrated LUFS
+  const ABS=Math.pow(10,(-70+0.691)/10);
+  let gated=blocks.filter(e=>e>ABS);
+  let IL=-Infinity;
+  if(gated.length){
+    if(dialogMode){
+      gated.sort((a,b)=>b-a);
+      gated=gated.slice(0,Math.max(1,Math.floor(gated.length*0.3)));
+    } else {
+      const avg=gated.reduce((s,e)=>s+e,0)/gated.length;
+      gated=gated.filter(e=>e>avg*Math.pow(10,-10/10));
+    }
+    if(gated.length) IL=-0.691+10*Math.log10(gated.reduce((s,e)=>s+e,0)/gated.length);
+  }
+
+  // Momentary max (400 ms = 4 blocs)
+  let M=-Infinity;
+  for(let i=0;i+4<=blocks.length;i++){
+    const e=(blocks[i]+blocks[i+1]+blocks[i+2]+blocks[i+3])/4;
+    const l=-0.691+10*Math.log10(Math.max(e,1e-12));
+    if(l>M) M=l;
+  }
+
+  // Short-term max (3 s = 30 blocs)
+  let S=-Infinity;
+  for(let i=0;i+30<=blocks.length;i++){
+    let e=0; for(let k=0;k<30;k++) e+=blocks[i+k];
+    const l=-0.691+10*Math.log10(Math.max(e/30,1e-12));
+    if(l>S) S=l;
+  }
+
+  // LRA (EBU Tech 3342 : percentiles 10%/95% sur short-term gated)
+  const stL=[];
+  for(let i=0;i+30<=blocks.length;i+=10){
+    let e=0; for(let k=0;k<30;k++) e+=blocks[i+k];
+    const l=-0.691+10*Math.log10(Math.max(e/30,1e-12));
+    if(l>-70) stL.push(l);
+  }
+  let LRA=0;
+  if(stL.length>=2){
+    stL.sort((a,b)=>a-b);
+    LRA=Math.max(0,stL[Math.floor(stL.length*.95)]-stL[Math.floor(stL.length*.10)]);
+  }
+
+  // True Peak (interpolation 4x)
+  let tp=0;
+  for(let c=0;c<nCh;c++){
+    const d=buf.getChannelData(c);
+    for(let i=1;i<d.length-2;i++){
+      // interpolation de Sinc simplifiée (4 points)
+      for(let k=0;k<4;k++){
+        const t=k/4;
+        const s=Math.abs(-t*(1-t)*(1-t)*d[i-1]+((1-t)*(1+t-t*t))*d[i]+(t*(1+(1-t)*t))*d[i+1]-(1-t)*t*t*d[i+2]);
+        if(s>tp) tp=s;
+      }
+    }
+  }
+  const TP=20*Math.log10(Math.max(tp,1e-12));
+
+  return {IL,TP,LRA,M,S,sr,nCh,duration:buf.duration};
+}
+
+// ─── PARSE HEADER WAV ─────────────────────────────────────────────────────────
+function readSlice(file,start,len){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>res(e.target.result);
+    r.onerror=()=>rej(new Error('Lecture impossible'));
+    r.readAsArrayBuffer(file.slice(start,start+len));
   });
 }
 
-// ─── PARSE HEADER WAV (RIFF / RF64, WAVE_FORMAT_EXTENSIBLE) ──────────────────
-async function parseWavHeader(file) {
-  const buf = await readSlice(file, 0, 8192);
-  const v   = new DataView(buf);
-  const u8  = new Uint8Array(buf);
-  const s4  = o => String.fromCharCode(u8[o],u8[o+1],u8[o+2],u8[o+3]);
-
-  const riff = s4(0);
-  if((riff!=='RIFF'&&riff!=='RF64') || s4(8)!=='WAVE') return null;
-
-  let pos=12, fmt=null, dataOffset=0, dataSize=0;
-  while(pos < u8.length - 8) {
-    const id = s4(pos);
-    const sz = v.getUint32(pos+4, true);
-    if(id==='fmt ') {
-      const audioFmt    = v.getUint16(pos+8,  true);
-      const nCh         = v.getUint16(pos+10, true);
-      const sr          = v.getUint32(pos+12, true);
-      const bitsPerSample = v.getUint16(pos+22, true);
-      const isFloat = (audioFmt===3) || (audioFmt===0xFFFE && bitsPerSample===32);
-      fmt = {audioFmt, nCh, sr, bitsPerSample, isFloat};
-      console.log('[WAV] fmt chunk:', fmt);
-    } else if(id==='data') {
-      dataOffset = pos + 8;
-      dataSize   = (sz===0 || sz===0xFFFFFFFF) ? 0 : sz;
-      console.log('[WAV] data chunk at', dataOffset, 'size', dataSize);
-      break;
+async function parseWavHeader(file){
+  const buf=await readSlice(file,0,8192);
+  const v=new DataView(buf),u8=new Uint8Array(buf);
+  const s4=o=>String.fromCharCode(u8[o],u8[o+1],u8[o+2],u8[o+3]);
+  if((s4(0)!=='RIFF'&&s4(0)!=='RF64')||s4(8)!=='WAVE') return null;
+  let pos=12,fmt=null,dataOffset=0,dataSize=0;
+  while(pos<u8.length-8){
+    const id=s4(pos),sz=v.getUint32(pos+4,true);
+    if(id==='fmt '){
+      const af=v.getUint16(pos+8,true),nCh=v.getUint16(pos+10,true),sr=v.getUint32(pos+12,true),bits=v.getUint16(pos+22,true);
+      fmt={nCh,sr,bitsPerSample:bits,isFloat:(af===3)||(af===0xFFFE&&bits===32)};
+    } else if(id==='data'){
+      dataOffset=pos+8; dataSize=(sz===0||sz===0xFFFFFFFF)?0:sz; break;
     }
-    const next = pos + 8 + sz + (sz & 1);
-    if(next <= pos || next > u8.length) break;
-    pos = next;
+    const next=pos+8+sz+(sz&1); if(next<=pos) break; pos=next;
   }
-
-  if(!fmt || !dataOffset) {
-    console.error('[WAV] fmt found:', !!fmt, 'data found:', !!dataOffset);
-    return null;
-  }
-
-  if(dataSize === 0) {
-    const bpf = fmt.nCh * (fmt.bitsPerSample / 8);
-    dataSize  = Math.floor((file.size - dataOffset) / bpf) * bpf;
-    console.log('[WAV] dataSize calculated from file.size:', dataSize);
-  }
-
-  return {...fmt, dataOffset, dataSize};
+  if(!fmt||!dataOffset) return null;
+  if(!dataSize) dataSize=Math.floor((file.size-dataOffset)/(fmt.nCh*(fmt.bitsPerSample/8)))*(fmt.nCh*(fmt.bitsPerSample/8));
+  return {...fmt,dataOffset,dataSize};
 }
 
-// ─── ANALYSE WAV CHUNKED (20 Mo par chunk, jamais tout en RAM) ────────────────
-async function analyzeWavChunked(file, info) {
-  const {nCh, sr, bitsPerSample, isFloat, dataOffset, dataSize} = info;
-  const bps        = bitsPerSample / 8;   // bytes per sample
-  const bpf        = nCh * bps;            // bytes per frame
-  const totalFrames= Math.floor(dataSize / bpf);
-  const gains      = Array.from({length:nCh},(_,i)=>chGain(nCh,i));
-  const STEP       = Math.round(0.1 * sr); // 100 ms en frames
-  const CHUNK_MAX  = 20 * 1024 * 1024;     // 20 Mo max par chunk
+// ─── ANALYSE WAV CHUNKED (pour fichiers > 500 Mo) ────────────────────────────
+async function analyzeWavChunked(file,info,dialogMode){
+  const {nCh,sr,bitsPerSample,isFloat,dataOffset,dataSize}=info;
+  const bps=bitsPerSample/8, bpf=nCh*bps;
+  const totalFrames=Math.floor(dataSize/bpf);
+  const STEP=Math.round(0.1*sr);
+  const CHUNK=Math.floor(20*1024*1024/bpf)*bpf; // ~20 Mo aligné sur des frames
+  const gains=Array.from({length:nCh},(_,i)=>chGain(nCh,i));
+  const kc=makeKCoeffs(sr);
 
-  // Filtre K-weighting : état par canal
-  const kc = makeKWeightCoeffs(sr);
-  const ks = Array.from({length:nCh},()=>({
+  // État des filtres biquad par canal (persistant entre chunks)
+  const fst=Array.from({length:nCh},()=>({
     s1:{x1:0,x2:0,y1:0,y2:0},
     s2:{x1:0,x2:0,y1:0,y2:0}
   }));
 
-  function kwSample(x, c) {
-    const st=ks[c];
-    // Stage 1
-    let y=kc.s1.b0*x+kc.s1.b1*st.s1.x1+kc.s1.b2*st.s1.x2-kc.s1.a1*st.s1.y1-kc.s1.a2*st.s1.y2;
-    st.s1.x2=st.s1.x1; st.s1.x1=x; st.s1.y2=st.s1.y1; st.s1.y1=y;
-    x=y;
-    // Stage 2
-    y=kc.s2.b0*x+kc.s2.b1*st.s2.x1+kc.s2.b2*st.s2.x2-kc.s2.a1*st.s2.y1-kc.s2.a2*st.s2.y2;
-    st.s2.x2=st.s2.x1; st.s2.x1=x; st.s2.y2=st.s2.y1; st.s2.y1=y;
+  function kwSample(x,c){
+    const f=fst[c];
+    let y=kc.s1.b0*x+kc.s1.b1*f.s1.x1+kc.s1.b2*f.s1.x2-kc.s1.a1*f.s1.y1-kc.s1.a2*f.s1.y2;
+    f.s1.x2=f.s1.x1;f.s1.x1=x;f.s1.y2=f.s1.y1;f.s1.y1=y;x=y;
+    y=kc.s2.b0*x+kc.s2.b1*f.s2.x1+kc.s2.b2*f.s2.x2-kc.s2.a1*f.s2.y1-kc.s2.a2*f.s2.y2;
+    f.s2.x2=f.s2.x1;f.s2.x1=x;f.s2.y2=f.s2.y1;f.s2.y1=y;
     return y;
   }
 
-  // Accumulateurs
-  const stepAccum = new Float64Array(nCh); // énergie K-weightée en cours sur 100ms
-  let   stepFill  = 0;
-  const blocks    = [];  // énergie pondérée par bloc de 100ms
-  let   truePeak  = 0;   // true peak (linéaire)
-  let   framePos  = 0;
+  // Accumulateurs par bloc de 100ms
+  // stepSum[c] = somme de kw^2 pour le canal c dans le bloc courant
+  const stepSum=new Float64Array(nCh);
+  let stepFill=0;
+  const blocks=[];
+  let truePeak=0;
+  let totalFramesDone=0;
 
   // Waveform décimée
-  const DECIM  = 512;
-  const waveData = Array.from({length:nCh},()=>[]);
+  const DECIM=Math.max(1,Math.floor(totalFrames/2000)); // ~2000 points max
+  const waveData=Array.from({length:nCh},()=>[]);
 
-  let chunkStart = dataOffset;
-  const totalBytes = dataSize;
-  let bytesRead  = 0;
+  let pos=dataOffset;
+  const end=dataOffset+dataSize;
 
-  while(chunkStart < dataOffset + totalBytes) {
-    const chunkLen = Math.min(CHUNK_MAX, dataOffset + totalBytes - chunkStart);
-    const chunkBuf = await readSlice(file, chunkStart, chunkLen);
-    const dv  = new DataView(chunkBuf);
-    const u8c = new Uint8Array(chunkBuf);
-    const nFramesChunk = Math.floor(chunkLen / bpf);
+  while(pos<end){
+    const chunkBytes=Math.min(CHUNK,end-pos);
+    const chunkBuf=await readSlice(file,pos,chunkBytes);
+    const dv=new DataView(chunkBuf);
+    const u8=new Uint8Array(chunkBuf);
+    const nFrames=Math.floor(chunkBytes/bpf);
 
-    for(let f=0; f<nFramesChunk; f++) {
-      const fOff = f * bpf;
-      for(let c=0; c<nCh; c++) {
-        const bOff = fOff + c * bps;
-        let raw = 0;
-        if(isFloat && bitsPerSample===32) {
-          raw = dv.getFloat32(bOff, true);
-        } else if(bitsPerSample===24) {
-          let v24 = u8c[bOff] | (u8c[bOff+1]<<8) | (u8c[bOff+2]<<16);
-          if(v24 & 0x800000) v24 |= 0xFF000000;
-          raw = v24 / 8388608.0;
-        } else if(bitsPerSample===16) {
-          raw = dv.getInt16(bOff, true) / 32768.0;
-        } else if(bitsPerSample===32) {
-          raw = dv.getInt32(bOff, true) / 2147483648.0;
-        }
+    for(let f=0;f<nFrames;f++){
+      const fo=f*bpf;
+      for(let c=0;c<nCh;c++){
+        const bo=fo+c*bps;
+        let raw=0;
+        if(isFloat&&bitsPerSample===32) raw=dv.getFloat32(bo,true);
+        else if(bitsPerSample===24){let v24=u8[bo]|(u8[bo+1]<<8)|(u8[bo+2]<<16);if(v24&0x800000)v24|=0xFF000000;raw=v24/8388608;}
+        else if(bitsPerSample===16) raw=dv.getInt16(bo,true)/32768;
+        else raw=dv.getInt32(bo,true)/2147483648;
 
-        // True peak (valeur absolue max)
-        const absRaw = raw < 0 ? -raw : raw;
-        if(absRaw > truePeak) truePeak = absRaw;
+        const a=raw<0?-raw:raw; if(a>truePeak) truePeak=a;
+        if((totalFramesDone+f)%DECIM===0) waveData[c].push(raw);
 
-        // Waveform décimée
-        if((framePos + f) % DECIM === 0) waveData[c].push(raw);
-
-        // K-weighting + accumulation énergie
-        const kw = kwSample(raw, c);
-        stepAccum[c] += kw * kw;
+        const kw=kwSample(raw,c);
+        stepSum[c]+=kw*kw;
       }
       stepFill++;
 
-      // Bloc de 100 ms terminé
-      if(stepFill >= STEP) {
-        let e = 0;
-        for(let c=0; c<nCh; c++) {
-          const g = gains[c];
-          if(g > 0) e += g * g * stepAccum[c] / stepFill;
-          stepAccum[c] = 0;
+      if(stepFill>=STEP){
+        // Bloc de 100ms complet : calculer l'énergie pondérée
+        let e=0;
+        for(let c=0;c<nCh;c++){
+          if(gains[c]>0) e+=gains[c]*(stepSum[c]/STEP);
+          stepSum[c]=0;
         }
         blocks.push(e);
-        stepFill = 0;
+        stepFill=0;
       }
     }
 
-    framePos   += nFramesChunk;
-    bytesRead  += chunkLen;
-    chunkStart += chunkLen;
-
-    const pct = bytesRead / totalBytes;
-    setProgress(10 + pct * 80, 'Analyse… ' + Math.round(pct*100) + '%');
+    totalFramesDone+=nFrames;
+    pos+=chunkBytes;
+    const pct=totalFramesDone/totalFrames;
+    setProgress(10+pct*80,'Analyse… '+Math.round(pct*100)+'%');
     await tick();
   }
 
-  // Flush dernier bloc partiel (si fichier pas multiple de 100ms)
-  if(stepFill > 0) {
-    let e = 0;
-    for(let c=0; c<nCh; c++) {
-      const g = gains[c];
-      if(g > 0) e += g * stepAccum[c] / stepFill;  // gain linéaire BS.1770
-    }
-    blocks.push(e);
-  }
-
-  // ── Integrated LUFS (BS.1770-4) ─────────────────────────────────────────
-  const ABS_THRESH = Math.pow(10, (-70 + 0.691) / 10);
-  let gated = blocks.filter(e => e > ABS_THRESH);
-  let IL = -Infinity;
-  if(gated.length) {
-    const avgAbs = gated.reduce((s,e)=>s+e,0) / gated.length;
-    const relT   = avgAbs * Math.pow(10, -10/10);
-    gated = gated.filter(e => e > relT);
-    if(gated.length) IL = lufsFromEnergy(gated.reduce((s,e)=>s+e,0) / gated.length);
-  }
-
-  // ── Momentary Max (400 ms = 4 blocs) ─────────────────────────────────────
-  let M = -Infinity;
-  for(let i=0; i+4<=blocks.length; i++) {
-    const e = (blocks[i]+blocks[i+1]+blocks[i+2]+blocks[i+3]) / 4;
-    const l = lufsFromEnergy(e);
-    if(l > M) M = l;
-  }
-
-  // ── Short-Term Max (3 s = 30 blocs) ──────────────────────────────────────
-  let S = -Infinity;
-  for(let i=0; i+30<=blocks.length; i++) {
-    let e = 0;
-    for(let k=0; k<30; k++) e += blocks[i+k];
-    const l = lufsFromEnergy(e/30);
-    if(l > S) S = l;
-  }
-
-  // ── LRA (EBU Tech 3342 — percentiles 10% / 95% sur short-term gated) ─────
-  const stLufs = [];
-  for(let i=0; i+30<=blocks.length; i+=10) {
-    let e=0; for(let k=0;k<30;k++) e+=blocks[i+k];
-    const l = lufsFromEnergy(e/30);
-    if(l > -70) stLufs.push(l);
-  }
-  let LRA = 0;
-  if(stLufs.length >= 2) {
-    stLufs.sort((a,b)=>a-b);
-    const lo = stLufs[Math.floor(stLufs.length * 0.10)];
-    const hi = stLufs[Math.floor(stLufs.length * 0.95)];
-    LRA = Math.max(0, hi - lo);
-  }
-
-  // ── True Peak en dBTP ─────────────────────────────────────────────────────
-  const TP = 20 * Math.log10(Math.max(truePeak, 1e-12));
-
-  // ── Waveform AudioBuffer ──────────────────────────────────────────────────
-  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  const waveLen = waveData[0].length || 1;
-  const waveBuf = audioCtx.createBuffer(nCh, waveLen, sr);
-  for(let c=0; c<nCh; c++) {
-    const ch = waveBuf.getChannelData(c);
-    for(let i=0; i<waveLen; i++) ch[i] = waveData[c][i] || 0;
-  }
-
-  return {IL, TP, LRA, M, S, sr, nCh, duration:totalFrames/sr, waveBuf};
-}
-
-// ─── ANALYSE NON-WAV via decodeAudioData (MP3, AAC, MP4…) ────────────────────
-async function analyzeDecoded(buf) {
-  const sr  = buf.sampleRate;
-  const nCh = buf.numberOfChannels;
-  const gains = Array.from({length:nCh},(_,i)=>chGain(nCh,i));
-  const STEP  = Math.round(0.1 * sr);
-
-  const kw = [];
-  for(let c=0; c<nCh; c++) kw.push(kWeight(buf.getChannelData(c).slice(), sr));
-
-  const blocks = [];
-  const len = kw[0].length;
-  for(let i=0; i+STEP<=len; i+=STEP) {
+  // Flush dernier bloc partiel
+  if(stepFill>0){
     let e=0;
-    for(let c=0; c<nCh; c++) {
-      const g=gains[c]; if(!g) continue;
-      let s=0; for(let k=i;k<i+STEP;k++) s+=kw[c][k]*kw[c][k];
-      e += g * s/STEP;   // BS.1770 : gain linéaire (pas au carré)
-    }
+    for(let c=0;c<nCh;c++){if(gains[c]>0) e+=gains[c]*(stepSum[c]/stepFill);}
     blocks.push(e);
   }
 
-  // Integrated
-  const ABS = Math.pow(10,(-70+0.691)/10);
-  let gated = blocks.filter(e=>e>ABS);
-  let IL = -Infinity;
-  if(gated.length) {
-    const avg = gated.reduce((s,e)=>s+e,0)/gated.length;
-    gated = gated.filter(e=>e>avg*Math.pow(10,-10/10));
-    if(gated.length) IL = lufsFromEnergy(gated.reduce((s,e)=>s+e,0)/gated.length);
+  // Calcul R128 identique au moteur normal
+  const ABS=Math.pow(10,(-70+0.691)/10);
+  let gated=blocks.filter(e=>e>ABS);
+  let IL=-Infinity;
+  if(gated.length){
+    if(dialogMode){gated.sort((a,b)=>b-a);gated=gated.slice(0,Math.max(1,Math.floor(gated.length*.3)));}
+    else{const avg=gated.reduce((s,e)=>s+e,0)/gated.length;gated=gated.filter(e=>e>avg*Math.pow(10,-10/10));}
+    if(gated.length) IL=-0.691+10*Math.log10(gated.reduce((s,e)=>s+e,0)/gated.length);
   }
 
-  // Momentary
   let M=-Infinity;
-  for(let i=0;i+4<=blocks.length;i++){const e=(blocks[i]+blocks[i+1]+blocks[i+2]+blocks[i+3])/4;const l=lufsFromEnergy(e);if(l>M)M=l}
+  for(let i=0;i+4<=blocks.length;i++){const e=(blocks[i]+blocks[i+1]+blocks[i+2]+blocks[i+3])/4;const l=-0.691+10*Math.log10(Math.max(e,1e-12));if(l>M)M=l;}
 
-  // Short-Term
   let S=-Infinity;
-  for(let i=0;i+30<=blocks.length;i++){let e=0;for(let k=0;k<30;k++)e+=blocks[i+k];const l=lufsFromEnergy(e/30);if(l>S)S=l}
+  for(let i=0;i+30<=blocks.length;i++){let e=0;for(let k=0;k<30;k++)e+=blocks[i+k];const l=-0.691+10*Math.log10(Math.max(e/30,1e-12));if(l>S)S=l;}
 
-  // LRA
   const stL=[];
-  for(let i=0;i+30<=blocks.length;i+=10){let e=0;for(let k=0;k<30;k++)e+=blocks[i+k];const l=lufsFromEnergy(e/30);if(l>-70)stL.push(l)}
+  for(let i=0;i+30<=blocks.length;i+=10){let e=0;for(let k=0;k<30;k++)e+=blocks[i+k];const l=-0.691+10*Math.log10(Math.max(e/30,1e-12));if(l>-70)stL.push(l);}
   let LRA=0;
-  if(stL.length>=2){stL.sort((a,b)=>a-b);LRA=Math.max(0,stL[Math.floor(stL.length*.95)]-stL[Math.floor(stL.length*.10)])}
+  if(stL.length>=2){stL.sort((a,b)=>a-b);LRA=Math.max(0,stL[Math.floor(stL.length*.95)]-stL[Math.floor(stL.length*.10)]);}
 
-  // True Peak
-  let tp=0;
-  for(let c=0;c<nCh;c++){const d=buf.getChannelData(c);for(let i=0;i<d.length-1;i++){const a=Math.abs(d[i]),b=Math.abs(d[i+1]);if(a>tp)tp=a;for(let k=1;k<4;k++){const v=Math.abs(a+(b-a)*k/4);if(v>tp)tp=v}}}
-  const TP=20*Math.log10(Math.max(tp,1e-12));
+  const TP=20*Math.log10(Math.max(truePeak,1e-12));
 
-  return {IL,TP,LRA,M,S,sr,nCh,duration:buf.duration,waveBuf:buf};
+  // AudioBuffer pour waveform
+  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  const wl=Math.max(1,waveData[0].length);
+  const waveBuf=audioCtx.createBuffer(nCh,wl,sr);
+  for(let c=0;c<nCh;c++){const ch=waveBuf.getChannelData(c);for(let i=0;i<wl;i++)ch[i]=waveData[c][i]||0;}
+
+  return {IL,TP,LRA,M,S,sr,nCh,duration:totalFrames/sr,waveBuf};
 }
 
 // ─── WAVEFORM ─────────────────────────────────────────────────────────────────
-function drawWaveform(waveBuf) {
-  const nCh   = waveBuf.numberOfChannels;
-  const names = chNames(nCh);
-  const legend= $('chLegend');
-  legend.innerHTML='';
-  names.forEach((n,i)=>{
-    const isLFE=(LFE_MAP[nCh]===i);
-    const d=document.createElement('div'); d.className='ch-dot';
-    d.innerHTML=`<div class="dot" style="background:${CH_COLORS[i]||'#fff'};opacity:${isLFE?.4:1}"></div>${n}`;
-    legend.appendChild(d);
-  });
-  const canvas=$('waveCanvas');
-  const W=canvas.offsetWidth||1100, H=220;
-  canvas.width=W; canvas.height=H;
-  const ctx=canvas.getContext('2d');
-  ctx.clearRect(0,0,W,H);
+function drawWaveform(buf){
+  const nCh=buf.numberOfChannels,names=chNames(nCh);
+  const legend=$('chLegend');legend.innerHTML='';
+  names.forEach((n,i)=>{const d=document.createElement('div');d.className='ch-dot';d.innerHTML=`<div class="dot" style="background:${CH_COLORS[i]||'#fff'};opacity:${LFE_MAP[nCh]===i?.4:1}"></div>${n}`;legend.appendChild(d);});
+  const canvas=$('waveCanvas'),W=canvas.offsetWidth||1100,H=220;
+  canvas.width=W;canvas.height=H;
+  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,H);
   const rowH=H/nCh;
   for(let c=0;c<nCh;c++){
-    const data=waveBuf.getChannelData(c);
-    const isLFE=(LFE_MAP[nCh]===c);
-    const color=CH_COLORS[c]||'#fff';
-    const mid=rowH*c+rowH/2, amp=rowH/2*.88*(isLFE?.4:1);
+    const data=buf.getChannelData(c),isLFE=LFE_MAP[nCh]===c,color=CH_COLORS[c]||'#fff';
+    const mid=rowH*c+rowH/2,amp=rowH/2*.88*(isLFE?.4:1);
     const step=Math.max(1,Math.floor(data.length/W));
-    ctx.strokeStyle=color; ctx.globalAlpha=isLFE?.3:.75; ctx.lineWidth=1;
-    ctx.beginPath();
-    for(let x=0;x<W;x++){
-      let mn=1,mx=-1;
-      for(let j=x*step;j<(x+1)*step&&j<data.length;j++){if(data[j]<mn)mn=data[j];if(data[j]>mx)mx=data[j]}
-      ctx.moveTo(x,mid-mx*amp); ctx.lineTo(x,mid-mn*amp);
-    }
-    ctx.stroke();
-    ctx.globalAlpha=.18; ctx.strokeStyle='#fff';
-    ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(W,mid); ctx.stroke();
-    ctx.globalAlpha=.7; ctx.fillStyle=color; ctx.font='bold 11px Inter,sans-serif';
-    ctx.fillText(names[c],8,rowH*c+14);
+    ctx.strokeStyle=color;ctx.globalAlpha=isLFE?.3:.75;ctx.lineWidth=1;ctx.beginPath();
+    for(let x=0;x<W;x++){let mn=1,mx=-1;for(let j=x*step;j<(x+1)*step&&j<data.length;j++){if(data[j]<mn)mn=data[j];if(data[j]>mx)mx=data[j];}ctx.moveTo(x,mid-mx*amp);ctx.lineTo(x,mid-mn*amp);}
+    ctx.stroke();ctx.globalAlpha=.18;ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(0,mid);ctx.lineTo(W,mid);ctx.stroke();
+    ctx.globalAlpha=.7;ctx.fillStyle=color;ctx.font='bold 11px Inter,sans-serif';ctx.fillText(names[c],8,rowH*c+14);
   }
   ctx.globalAlpha=1;
 }
 
-// ─── AFFICHAGE RÉSULTATS ──────────────────────────────────────────────────────
-function displayResults(res){
-  const {IL,TP,LRA,M,S,sr,nCh,duration,waveBuf}=res;
-  const ilOk=IL>=-27&&IL<=-21, tpOk=TP<=-1, lraOk=LRA<=20;
-  $('cIL').className='panel card '+(ilOk?'ok':'bad'); $('vIL').textContent=fmt(IL);
+// ─── AFFICHAGE ────────────────────────────────────────────────────────────────
+function displayResults(res,waveBuf){
+  const {IL,TP,LRA,M,S,sr,nCh,duration}=res;
+  const ilOk=IL>=-27&&IL<=-21,tpOk=TP<=-1,lraOk=LRA<=20;
+  $('cIL').className='panel card '+(ilOk?'ok':'bad');$('vIL').textContent=fmt(IL);
   $('mainLabel').textContent=els.modeSelect.value==='dialog'?'Dialog-Gated':'Integrated';
-  $('cTP').className='panel card '+(tpOk?'ok':'bad'); $('vTP').textContent=fmt(TP);
-  $('cLRA').className='panel card '+(lraOk?'ok':'bad'); $('vLRA').textContent=fmt(LRA);
-  $('vM').textContent=fmt(M); $('vS').textContent=fmt(S);
+  $('cTP').className='panel card '+(tpOk?'ok':'bad');$('vTP').textContent=fmt(TP);
+  $('cLRA').className='panel card '+(lraOk?'ok':'bad');$('vLRA').textContent=fmt(LRA);
+  $('vM').textContent=fmt(M);$('vS').textContent=fmt(S);
   $('rMode').textContent=els.modeSelect.value==='dialog'?'Dialog-Gated (approx.)':'Standard BS.1770-4';
-  $('rIL').textContent=fmt(IL)+' LKFS'; $('rTP').textContent=fmt(TP)+' dBTP';
-  $('rLRA').textContent=fmt(LRA)+' LU'; $('rM').textContent=fmt(M)+' LUFS';
-  $('rS').textContent=fmt(S)+' LUFS'; $('rD').textContent=dur(duration);
-  $('rC').textContent=nCh+' ('+chNames(nCh).join(', ')+')';
+  $('rIL').textContent=fmt(IL)+' LKFS';$('rTP').textContent=fmt(TP)+' dBTP';
+  $('rLRA').textContent=fmt(LRA)+' LU';$('rM').textContent=fmt(M)+' LUFS';$('rS').textContent=fmt(S)+' LUFS';
+  $('rD').textContent=dur(duration);$('rC').textContent=nCh+' ('+chNames(nCh).join(', ')+')';
   $('rSR').textContent=sr>=1000?(sr/1000).toFixed(1)+' kHz':sr+' Hz';
   $('rN').innerHTML=ilOk&&tpOk?'<span class="pass">✓ Conforme (−24±3 LKFS, TP≤−1)</span>':'<span class="fail">✗ Non conforme</span>';
   $('report').style.display='block';
-  drawWaveform(waveBuf);
+  if(waveBuf) drawWaveform(waveBuf);
   hideProgress();
   setStatus('✓ Terminé — '+fmt(IL)+' LKFS · TP '+fmt(TP)+' dBTP · LRA '+fmt(LRA)+' LU','ok');
 }
 
 // ─── PIPELINE PRINCIPAL ───────────────────────────────────────────────────────
+const BIG_FILE=500*1024*1024; // 500 Mo : seuil chunked
+
 function loadFile(f){
-  currentFile=f;
-  els.meta.textContent=f.name+' — '+formatSize(f.size);
-  els.analyze.disabled=false;
-  clearStatus();
+  currentFile=f;els.meta.textContent=f.name+' — '+formatSize(f.size);
+  els.analyze.disabled=false;clearStatus();
   const isVideo=/\.(mp4|mov|mkv|webm)$/i.test(f.name);
-  if(isVideo){els.preview.src=URL.createObjectURL(f);els.preview.style.display='block'}
-  else{els.preview.style.display='none';els.preview.src=''}
+  if(isVideo){els.preview.src=URL.createObjectURL(f);els.preview.style.display='block';}
+  else{els.preview.style.display='none';els.preview.src='';}
 }
 
 async function startAnalysis(){
-  // Toujours rafraîchir depuis l'input
   if(els.file.files&&els.file.files[0]) currentFile=els.file.files[0];
   if(!currentFile) return;
-  els.analyze.disabled=true; clearStatus(); $('report').style.display='none';
-  setProgress(2,'Initialisation…'); await tick();
+  els.analyze.disabled=true;clearStatus();$('report').style.display='none';
+  setProgress(2,'Initialisation…');await tick();
   try{
     if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
     if(audioCtx.state==='suspended') await audioCtx.resume();
+    const dialogMode=els.modeSelect.value==='dialog';
     const isWav=/\.wav$/i.test(currentFile.name);
-    let results;
-    if(isWav){
-      setProgress(5,'Lecture header WAV…'); await tick();
+    const isBig=currentFile.size>BIG_FILE;
+
+    if(isWav&&isBig){
+      // Gros WAV : pipeline chunked (évite l'out-of-memory)
+      setProgress(5,'Lecture header WAV…');await tick();
       const info=await parseWavHeader(currentFile);
-      if(!info) throw new Error('Header WAV non reconnu. Vérifie que le fichier est un WAV PCM standard.');
-      console.log('[R128] WAV info:', info, 'File:', formatSize(currentFile.size));
-      results=await analyzeWavChunked(currentFile,info);
+      if(!info) throw new Error('Header WAV non reconnu. Vérifier que le fichier est un WAV PCM standard.');
+      console.log('[R128] WAV chunked:', info, formatSize(currentFile.size));
+      const res=await analyzeWavChunked(currentFile,info,dialogMode);
+      displayResults(res,res.waveBuf);
     } else {
-      setProgress(5,'Chargement…'); await tick();
-      const ab=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Lecture impossible'));r.readAsArrayBuffer(currentFile)});
-      setProgress(30,'Décodage audio…'); await tick();
-      const decoded=await new Promise((res,rej)=>audioCtx.decodeAudioData(ab,res,()=>rej(new Error('Format non supporté. Utilise un WAV PCM 48kHz 16/24-bit.'))));
-      setProgress(50,'Analyse…'); await tick();
-      results=await analyzeDecoded(decoded);
+      // Fichiers normaux : decodeAudioData natif (calcul éprouvé)
+      setProgress(5,'Chargement…');await tick();
+      const ab=await new Promise((res,rej)=>{
+        const r=new FileReader();
+        r.onload=e=>res(e.target.result);
+        r.onerror=()=>rej(new Error('Lecture impossible'));
+        r.readAsArrayBuffer(currentFile);
+      });
+      setProgress(40,'Décodage audio…');await tick();
+      const decoded=await new Promise((res,rej)=>
+        audioCtx.decodeAudioData(ab,res,()=>rej(new Error('Format non supporté. Pour les WAV multicanaux utilisez un WAV PCM 48kHz 16/24-bit.')))
+      );
+      setProgress(60,'Analyse R128…');await tick();
+      const stats=calcR128fromBuffer(decoded,dialogMode);
+      displayResults(stats,decoded);
     }
-    displayResults(results);
-  } catch(e){
-    hideProgress();
-    console.error('[R128]',e);
+  }catch(e){
+    hideProgress();console.error('[R128]',e);
     setStatus('Erreur : '+(e.message||e),'err');
   }
   els.analyze.disabled=false;
 }
 
 function doReset(){
-  currentFile=null; els.file.value=''; els.meta.textContent='Aucun fichier chargé';
-  els.analyze.disabled=true; clearStatus(); els.progressWrap.style.display='none';
-  els.preview.style.display='none'; els.preview.src=''; $('report').style.display='none';
+  currentFile=null;els.file.value='';els.meta.textContent='Aucun fichier chargé';
+  els.analyze.disabled=true;clearStatus();els.progressWrap.style.display='none';
+  els.preview.style.display='none';els.preview.src='';$('report').style.display='none';
   ['vIL','vTP','vLRA','vM','vS'].forEach(id=>$(id).textContent='—');
   ['cIL','cTP','cLRA','cM','cS'].forEach(id=>$(id).className='panel card');
   $('chLegend').innerHTML='';
-  const cv=$('waveCanvas'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+  const cv=$('waveCanvas');cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
 }
 
-// ─── ÉVÉNEMENTS ───────────────────────────────────────────────────────────────
-els.browseBtn.addEventListener('click',e=>{e.preventDefault();els.file.click()});
-els.file.addEventListener('change',()=>{if(els.file.files[0]) loadFile(els.file.files[0])});
-els.analyze.addEventListener('click',e=>{e.preventDefault();startAnalysis()});
-els.reset.addEventListener('click',e=>{e.preventDefault();doReset()});
-els.drop.addEventListener('dragover',e=>{e.preventDefault();els.drop.classList.add('drag')});
+// ─── EVENTS ───────────────────────────────────────────────────────────────────
+els.browseBtn.addEventListener('click',e=>{e.preventDefault();els.file.click();});
+els.file.addEventListener('change',()=>{if(els.file.files[0]) loadFile(els.file.files[0]);});
+els.analyze.addEventListener('click',e=>{e.preventDefault();startAnalysis();});
+els.reset.addEventListener('click',e=>{e.preventDefault();doReset();});
+els.drop.addEventListener('dragover',e=>{e.preventDefault();els.drop.classList.add('drag');});
 els.drop.addEventListener('dragleave',()=>els.drop.classList.remove('drag'));
-els.drop.addEventListener('drop',e=>{e.preventDefault();els.drop.classList.remove('drag');if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0])});
-els.modeSelect.addEventListener('change',()=>{els.modeHint.textContent=els.modeSelect.value==='dialog'?'Mode dialog-gated · parole':'Mode standard · BS.1770-4'});
-window.addEventListener('resize',()=>{const cv=$('waveCanvas');if(cv.width>0) cv.getContext('2d').clearRect(0,0,cv.width,cv.height)});
+els.drop.addEventListener('drop',e=>{e.preventDefault();els.drop.classList.remove('drag');if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);});
+els.modeSelect.addEventListener('change',()=>{els.modeHint.textContent=els.modeSelect.value==='dialog'?'Mode dialog-gated · parole':'Mode standard · BS.1770-4';});
+window.addEventListener('resize',()=>{const cv=$('waveCanvas');if(cv.width>0){const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);}});
 </script>
 </body>
 </html>
